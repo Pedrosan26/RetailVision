@@ -50,7 +50,7 @@ Both datasets consist of pre-cropped single-face images, so they're prepared as 
 Baseline classifiers are trained from scratch on the prepared datasets using `yolov8n-cls`. Age and gender are trained as two independent classifiers (YOLOv8 classification mode is single-label per run), even though both come from UTKFace.
 
 ```
-PYTHONPATH=scripts ./venv/bin/python3 scripts/train_age_gender_baseline.py     # trains age, then gender — several hours on MPS
+PYTHONPATH=scripts ./venv/bin/python3 scripts/train_age_gender_baseline.py     # trains age, then gender
 PYTHONPATH=scripts ./venv/bin/python3 scripts/evaluate_age_gender_baseline.py  # per-class precision/recall/F1, loss curves, report
 ```
 
