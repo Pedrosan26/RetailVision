@@ -15,7 +15,6 @@ The venv must be created with **Python 3.12** (via Homebrew's `python@3.12`), no
 
 `opencv-python` is pinned to `4.10.0.84` in `requirements.txt` — the current latest ships a broken build on macOS missing `cv2.CascadeClassifier` and the bundled Haar cascade XML files. Don't bump this pin without verifying `cv2.CascadeClassifier` and `cv2.data.haarcascades` still work.
 
-GPU acceleration uses Apple Silicon MPS (Metal) automatically where available; falls back to CPU otherwise.
 
 ## Running the live pipeline
 
