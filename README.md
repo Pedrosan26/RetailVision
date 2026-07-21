@@ -57,3 +57,14 @@ PYTHONPATH=scripts ./venv/bin/python3 scripts/evaluate_age_gender_baseline.py  #
 - `scripts/age_gender_baseline/` — training/evaluation package (`constants.py`, `train.py`, `evaluate.py`, `plotting.py`).
 - Trained weights are saved to `models/age_gender/baseline_age.pt` and `baseline_gender.pt` (gitignored, like all `*.pt` files).
 - Evaluation writes `models/age_gender/baseline_report.json` and a loss/accuracy curve PNG per task. YOLOv8 classification mode reports top1/top5 accuracy rather than mAP@0.5 (a detection-mode metric); per-class precision/recall/F1 are computed separately via scikit-learn on the held-out test split.
+
+Fine-tuning builds on the baseline with augmentation and adjusted hyperparameters, retraining from `yolov8n-cls.pt` rather than continuing from the baseline weights (see `docs/models/age_gender_finetune.md` for why).
+
+```
+PYTHONPATH=scripts ./venv/bin/python3 scripts/finetune_age_gender.py           # trains age, then gender, with augmentation
+PYTHONPATH=scripts ./venv/bin/python3 scripts/evaluate_age_gender_finetune.py  # per-class metrics, loss curves, threshold check, report
+```
+
+- `scripts/age_gender_finetune/` — fine-tune training package (`constants.py`, `train.py`); reuses `age_gender_baseline`'s evaluation/plotting helpers, which are generic.
+- Final weights are saved to `models/age_gender/final_age.pt` and `final_gender.pt`.
+- Evaluation writes `models/age_gender/final_report.json`, checking top1 accuracy against the required 75% (age) / 85% (gender) thresholds per task.
