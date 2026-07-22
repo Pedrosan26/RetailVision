@@ -68,3 +68,16 @@ PYTHONPATH=scripts ./venv/bin/python3 scripts/evaluate_age_gender_finetune.py  #
 - `scripts/age_gender_finetune/` — fine-tune training package (`constants.py`, `train.py`); reuses `age_gender_baseline`'s evaluation/plotting helpers, which are generic.
 - Final weights are saved to `models/age_gender/final_age.pt` and `final_gender.pt`.
 - Evaluation writes `models/age_gender/final_report.json`, checking top1 accuracy against the required 75% (age) / 85% (gender) thresholds per task.
+
+## Real-world evaluation
+
+The fine-tuned classifiers are also validated against live webcam video, not just the static UTKFace test set, to check whether test-set accuracy holds up under real capture conditions. See `docs/model_evaluation.md` for results — notably, gender classification generalizes well, while age classification degrades severely on live camera input regardless of condition, and face detection itself fails on faces angled past ~45°.
+
+```
+PYTHONPATH=.:scripts ./venv/bin/python3 scripts/evaluate_real_world.py --condition <name> --true-age <bin> --true-gender <Male|Female>
+PYTHONPATH=.:scripts ./venv/bin/python3 scripts/summarize_real_world_eval.py
+```
+
+- `scripts/real_world_eval/` — live-capture package (`constants.py`, `classify.py`, `capture.py`), reusing the existing `FaceDetector`.
+- Each condition session opens a live preview (green box = correct, red = wrong) and appends per-frame predictions to `runs/real_world_eval/<condition>.csv`; press `q` to stop.
+- Summarization writes `models/age_gender/real_world_eval_report.json`: face-detection rate and per-task accuracy per condition, compared against the RV-005 test-set accuracy.
