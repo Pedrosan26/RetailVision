@@ -18,10 +18,12 @@ PROCESSED_DIR = REPO_ROOT / "data" / "utkface" / "processed"
 REPORT_PATH = PROCESSED_DIR / "distribution_report.json"
 
 AGE_BINS = [
-    (0, 17, "0-17"),
-    (18, 30, "18-30"),
-    (31, 50, "31-50"),
-    (51, 200, "51+"),
+    (0, 5, "0-5"),
+    (6, 12, "6-12"),
+    (13, 17, "13-17"),
+    (18, 40, "18-40"),
+    (41, 64, "41-64"),
+    (65, 200, "65+"),
 ]
 GENDER_LABELS = {0: "Male", 1: "Female"}
 RACE_LABELS = {0: "White", 1: "Black", 2: "Asian", 3: "Indian", 4: "Others"}

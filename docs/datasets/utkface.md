@@ -31,10 +31,26 @@ no `.txt` annotation files.
 
 ```
 data/utkface/processed/
-  age/{train,val,test}/{0-17,18-30,31-50,51+}/*.jpg   (symlinks into raw/)
-  gender/{train,val,test}/{Male,Female}/*.jpg          (symlinks into raw/)
+  age/{train,val,test}/{0-5,6-12,13-17,18-40,41-64,65+}/*.jpg   (symlinks into raw/)
+  gender/{train,val,test}/{Male,Female}/*.jpg                   (symlinks into raw/)
   distribution_report.json
 ```
+
+### Why these bins (revised after RV-008)
+
+The age bins are asymmetric by design, not evenly spaced. An earlier attempt
+(RV-008, see `docs/models/age_rebinning_investigation.md`) tried uniform 7-
+and 10-class schemes and found that childhood/adolescent and elderly
+brackets classify reliably (F1 0.82-0.98), while adult brackets in the
+18-70 range plateau at 50-65% F1 regardless of tuning — narrower cuts there
+ask the classifier to draw boundaries the visual signal doesn't support.
+This scheme keeps every bin that RV-008 proved reliable exactly as fine as
+it was (`0-5`, `6-12`, `13-17`, `65+`), and merges the entire range that was
+stuck (`18-25`, `26-32`, `33-40` were all weak or completely unmoving under
+fine-tuning) into a single `18-40` bucket, plus one `41-64` bucket for the
+remaining moderate-difficulty adult range. A separate continuous
+age-regression model (RET-31) covers the finer-grained estimate this
+classifier deliberately no longer attempts.
 
 Two independent classification trees (age, gender) are generated from the
 same split so a future contributor can train `yolov8n-cls` directly against
@@ -49,14 +65,19 @@ with a fixed seed (42) so re-running the script reproduces the same split.
 
 | Age group | Count | Share |
 |---|---|---|
-| 0–17 | 8,158 | 24.4% |
-| 18–30 | 10,292 | 30.7% |
-| 31–50 | 8,143 | 24.3% |
-| 51+ | 6,888 | 20.6% |
+| 0–5 | 4,674 | 14.0% |
+| 6–12 | 1,994 | 6.0% |
+| 13–17 | 1,490 | 4.5% |
+| 18–40 | 15,640 | 46.7% |
+| 41–64 | 6,612 | 19.8% |
+| 65+ | 3,071 | 9.2% |
 
-Mild imbalance — largest class (18–30) is ~1.5x the smallest (51+). Not
-severe enough to require oversampling, but worth watching in per-class
-eval metrics; if 51+ recall lags noticeably, revisit with class weighting.
+`18-40` is intentionally the majority class (~47%) — it absorbs the age
+range the classifier could never reliably subdivide, and having the most
+data for it should make that broad distinction ("not a child, not older")
+easy. `13-17` is the smallest at 4.5%; worth watching in per-class eval
+metrics, though it was one of the strongest-performing classes in RV-008
+even at that size.
 
 | Gender | Count | Share |
 |---|---|---|
