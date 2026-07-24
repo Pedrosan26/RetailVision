@@ -47,7 +47,7 @@ Both datasets consist of pre-cropped single-face images, so they're prepared as 
 
 ## Model training
 
-Baseline classifiers are trained from scratch on the prepared datasets using `yolov8n-cls`. Age and gender are trained as two independent classifiers (YOLOv8 classification mode is single-label per run), even though both come from UTKFace.
+Baseline classifiers are trained from scratch on the prepared datasets using `yolov8n-cls`. Age and gender are trained as two independent classifiers (YOLOv8 classification mode is single-label per run), even though both come from UTKFace. For the full history of decisions, results, and graphics behind the age/gender model line (dataset → baseline → fine-tune → real-world eval → rebinning → regression), see [`docs/models/README.md`](docs/models/README.md).
 
 ```
 PYTHONPATH=scripts ./venv/bin/python3 scripts/train_age_gender_baseline.py     # trains age, then gender
@@ -71,13 +71,13 @@ PYTHONPATH=scripts ./venv/bin/python3 scripts/evaluate_age_gender_finetune.py  #
 
 ## Live demo
 
-To just watch the current classifiers run on your own webcam, with no ground truth or logging needed:
+To just watch the current classifiers and the age-regression model run on your own webcam, with no ground truth or logging needed:
 
 ```
 PYTHONPATH=.:scripts ./venv/bin/python3 scripts/live_demo.py
 ```
 
-Opens a live preview with each detected face boxed and labeled with its predicted age bin, gender, and confidence. Always reflects whatever weights currently sit at `models/age_gender/final_age.pt`/`final_gender.pt`. Press `q` to quit. For accuracy evaluation (logging predictions against a known ground truth across conditions), see Real-world evaluation below instead.
+Opens a live preview with each detected face boxed and labeled with its predicted age bin, continuous age estimate, gender, and confidence — e.g. `18-40 (~26y, 0.91) / Male (0.97)`. Always reflects whatever weights currently sit at `models/age_gender/final_age.pt`/`final_gender.pt`/`regression_age.pt`. Press `q` to quit. For accuracy evaluation (logging predictions against a known ground truth across conditions), see Real-world evaluation below instead.
 
 ## Real-world evaluation
 
