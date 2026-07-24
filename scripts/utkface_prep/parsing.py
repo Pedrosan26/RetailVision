@@ -33,6 +33,7 @@ def parse_filename(path: Path) -> dict | None:
         return None
     return {
         "path": path,
+        "age": age,
         "age_group": bin_age(age),
         "gender": GENDER_LABELS[gender],
         "race": RACE_LABELS.get(race, "Unknown"),
