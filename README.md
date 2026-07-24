@@ -69,6 +69,16 @@ PYTHONPATH=scripts ./venv/bin/python3 scripts/evaluate_age_gender_finetune.py  #
 - Final weights are saved to `models/age_gender/final_age.pt` and `final_gender.pt`.
 - Evaluation writes `models/age_gender/final_report.json`, checking top1 accuracy against the required 75% (age) / 85% (gender) thresholds per task.
 
+## Live demo
+
+To just watch the current classifiers run on your own webcam, with no ground truth or logging needed:
+
+```
+PYTHONPATH=.:scripts ./venv/bin/python3 scripts/live_demo.py
+```
+
+Opens a live preview with each detected face boxed and labeled with its predicted age bin, gender, and confidence. Always reflects whatever weights currently sit at `models/age_gender/final_age.pt`/`final_gender.pt`. Press `q` to quit. For accuracy evaluation (logging predictions against a known ground truth across conditions), see Real-world evaluation below instead.
+
 ## Real-world evaluation
 
 The fine-tuned classifiers are also validated against live webcam video, not just the static UTKFace test set, to check whether test-set accuracy holds up under real capture conditions. See `docs/model_evaluation.md` for results — notably, gender classification generalizes well, while age classification degrades severely on live camera input regardless of condition, and face detection itself fails on faces angled past ~45°.
