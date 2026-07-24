@@ -1,0 +1,74 @@
+{
+  "age": {
+    "weights": "/Users/pedrosan/Desktop/Github/RetailVision/models/age_gender/final_age.pt",
+    "top_k_accuracy": {
+      "top1_accuracy": 0.8877,
+      "top5_accuracy": 1.0
+    },
+    "min_accuracy_threshold": 0.75,
+    "passed_threshold": true,
+    "per_class_metrics": {
+      "0-5": {
+        "precision": 0.9701,
+        "recall": 0.9715,
+        "f1": 0.9708,
+        "support": 701
+      },
+      "13-17": {
+        "precision": 0.8511,
+        "recall": 0.7175,
+        "f1": 0.7786,
+        "support": 223
+      },
+      "18-40": {
+        "precision": 0.9119,
+        "recall": 0.9267,
+        "f1": 0.9192,
+        "support": 2346
+      },
+      "41-64": {
+        "precision": 0.7884,
+        "recall": 0.7923,
+        "f1": 0.7903,
+        "support": 992
+      },
+      "6-12": {
+        "precision": 0.8691,
+        "recall": 0.8633,
+        "f1": 0.8662,
+        "support": 300
+      },
+      "65+": {
+        "precision": 0.8786,
+        "recall": 0.8652,
+        "f1": 0.8719,
+        "support": 460
+      }
+    },
+    "loss_curve_plot": "/Users/pedrosan/Desktop/Github/RetailVision/models/age_gender/final_age_loss_curves.png"
+  },
+  "gender": {
+    "weights": "/Users/pedrosan/Desktop/Github/RetailVision/models/age_gender/final_gender.pt",
+    "top_k_accuracy": {
+      "top1_accuracy": 0.9634,
+      "top5_accuracy": 1.0
+    },
+    "min_accuracy_threshold": 0.85,
+    "passed_threshold": true,
+    "per_class_metrics": {
+      "Female": {
+        "precision": 0.9704,
+        "recall": 0.9557,
+        "f1": 0.963,
+        "support": 2508
+      },
+      "Male": {
+        "precision": 0.9565,
+        "recall": 0.971,
+        "f1": 0.9637,
+        "support": 2514
+      }
+    },
+    "loss_curve_plot": "/Users/pedrosan/Desktop/Github/RetailVision/models/age_gender/final_gender_loss_curves.png"
+  }
+}

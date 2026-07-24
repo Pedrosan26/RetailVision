@@ -1,0 +1,22 @@
+{
+  "weights": "/Users/pedrosan/Desktop/Github/RetailVision/models/age_gender/regression_age.pt",
+  "overall_mae": 3.6494,
+  "per_age_group_mae": {
+    "0-17": {
+      "mae": 1.3278,
+      "support": 1225
+    },
+    "18-30": {
+      "mae": 2.9358,
+      "support": 1544
+    },
+    "31-50": {
+      "mae": 5.2177,
+      "support": 1222
+    },
+    "51+": {
+      "mae": 5.6138,
+      "support": 1033
+    }
+  }
+}
