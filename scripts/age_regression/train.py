@@ -7,10 +7,13 @@ more robust to any mislabeled/outlier ages in the scraped UTKFace data
 than MSE), Adam, early stopping on validation MAE, and a per-epoch
 results.csv matching the loss-curve logging convention used by the
 YOLOv8 classifiers (train/val loss, val MAE) for consistency across the
-project's model docs.
+project's model docs. Prints live per-batch progress (batches/sec,
+running loss) during each phase, since this plain PyTorch loop has no
+built-in progress bar the way Ultralytics' training does.
 """
 
 import csv
+import time
 
 import torch
 import torch.nn as nn
@@ -21,7 +24,7 @@ from .dataset import EVAL_TRANSFORM, TRAIN_TRANSFORM, AgeRegressionDataset
 from .model import build_model
 
 
-def _run_epoch(model, loader, device, optimizer=None) -> tuple[float, float]:
+def _run_epoch(model, loader, device, phase: str, optimizer=None) -> tuple[float, float]:
     """Run one epoch (training if optimizer given, else evaluation-only); return (loss, MAE)."""
     is_train = optimizer is not None
     model.train(is_train)
@@ -30,8 +33,10 @@ def _run_epoch(model, loader, device, optimizer=None) -> tuple[float, float]:
     total_loss = 0.0
     total_abs_error = 0.0
     total_examples = 0
+    num_batches = len(loader)
+    start = time.time()
     with torch.set_grad_enabled(is_train):
-        for images, ages in loader:
+        for batch_index, (images, ages) in enumerate(loader, start=1):
             images, ages = images.to(device), ages.to(device)
             predictions = model(images).squeeze(1)
             loss = criterion(predictions, ages)
@@ -45,6 +50,16 @@ def _run_epoch(model, loader, device, optimizer=None) -> tuple[float, float]:
             total_loss += loss.item() * batch_size
             total_abs_error += torch.sum(torch.abs(predictions - ages)).item()
             total_examples += batch_size
+
+            elapsed = time.time() - start
+            rate = batch_index / elapsed if elapsed > 0 else 0.0
+            print(
+                f"\r  {phase} {batch_index}/{num_batches}  "
+                f"loss={total_loss / total_examples:.4f}  {rate:.1f} batch/s",
+                end="",
+                flush=True,
+            )
+    print()
 
     return total_loss / total_examples, total_abs_error / total_examples
 
@@ -73,8 +88,9 @@ def train_regression(device: str) -> dict:
         writer.writerow(["epoch", "train_loss", "val_loss", "val_mae"])
 
         for epoch in range(1, EPOCHS + 1):
-            train_loss, _ = _run_epoch(model, train_loader, device, optimizer)
-            val_loss, val_mae = _run_epoch(model, val_loader, device)
+            print(f"epoch {epoch}/{EPOCHS}")
+            train_loss, _ = _run_epoch(model, train_loader, device, "train", optimizer)
+            val_loss, val_mae = _run_epoch(model, val_loader, device, "val")
 
             writer.writerow([epoch, round(train_loss, 5), round(val_loss, 5), round(val_mae, 5)])
             f.flush()
