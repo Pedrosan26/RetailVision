@@ -69,6 +69,19 @@ PYTHONPATH=scripts ./venv/bin/python3 scripts/evaluate_age_gender_finetune.py  #
 - Final weights are saved to `models/age_gender/final_age.pt` and `final_gender.pt`.
 - Evaluation writes `models/age_gender/final_report.json`, checking top1 accuracy against the required 75% (age) / 85% (gender) thresholds per task.
 
+### Emotion classifier
+
+A single `yolov8n-cls` classifier trained from scratch on FER-2013 (7 emotion classes), same baseline methodology as age/gender (RV-004): Ultralytics defaults, 100 epochs, `imgsz=224`.
+
+```
+PYTHONPATH=scripts ./venv/bin/python3 scripts/train_emotion_baseline.py     # trains the emotion classifier
+PYTHONPATH=scripts ./venv/bin/python3 scripts/evaluate_emotion_baseline.py  # per-class precision/recall/F1, loss curves, report
+```
+
+- `scripts/emotion_baseline/` — training/evaluation package (`constants.py`, `train.py`, `evaluate.py`, `plotting.py`), mirroring `age_gender_baseline/`'s structure.
+- Trained weights are saved to `models/emotion/baseline.pt`.
+- Evaluation writes `models/emotion/baseline_report.json` and a loss/accuracy curve PNG. See `docs/models/emotion_baseline.md` for full results and findings (71.12% top1; Fear is the weakest class as expected, but Disgust — despite being the most underrepresented class — outperforms several more common classes).
+
 ## Live demo
 
 To just watch the current classifiers and the age-regression model run on your own webcam, with no ground truth or logging needed:
