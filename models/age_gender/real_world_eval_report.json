@@ -1,0 +1,44 @@
+{
+  "test_set_accuracy": {
+    "age": 0.8487,
+    "gender": 0.964
+  },
+  "conditions": {
+    "angled_45": {
+      "total_frames": 452,
+      "faces_detected": 237,
+      "face_detection_rate": 0.5243,
+      "age_accuracy": 0.2996,
+      "gender_accuracy": 0.9578,
+      "age_degradation_vs_test_set": 0.5491,
+      "gender_degradation_vs_test_set": 0.0062
+    },
+    "low_light": {
+      "total_frames": 147,
+      "faces_detected": 141,
+      "face_detection_rate": 0.9592,
+      "age_accuracy": 0.3404,
+      "gender_accuracy": 1.0,
+      "age_degradation_vs_test_set": 0.5083,
+      "gender_degradation_vs_test_set": -0.036
+    },
+    "normal_light": {
+      "total_frames": 1021,
+      "faces_detected": 812,
+      "face_detection_rate": 0.7953,
+      "age_accuracy": 0.2549,
+      "gender_accuracy": 0.9113,
+      "age_degradation_vs_test_set": 0.5938,
+      "gender_degradation_vs_test_set": 0.0527
+    },
+    "turned_away": {
+      "total_frames": 288,
+      "faces_detected": 234,
+      "face_detection_rate": 0.8125,
+      "age_accuracy": 0.4017,
+      "gender_accuracy": 0.9786,
+      "age_degradation_vs_test_set": 0.447,
+      "gender_degradation_vs_test_set": -0.0146
+    }
+  }
+}

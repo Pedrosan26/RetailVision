@@ -1,2 +1,110 @@
 # RetailVision
+
 AI-powered computer vision pipeline for real-time customer demographic detection, emotion recognition, foot traffic counting, and zone-engagement scoring in retail environments.
+
+Single-process pipeline: one service ingests camera streams and runs detection, demographic/emotion recognition, foot traffic counting, and zone-engagement scoring, rather than splitting these into separate microservices. Built on OpenCV (capture/detection) and PyTorch/Ultralytics YOLOv8 (recognition/classification, trained from scratch on public datasets rather than a pretrained fallback).
+
+## Setup
+
+```
+python3.12 -m venv venv
+./venv/bin/pip install -r requirements.txt
+```
+
+The venv must be created with **Python 3.12** (via Homebrew's `python@3.12`), not the system `/usr/bin/python3` (3.9.6, too old) and not another project's venv that may be first on `PATH`.
+
+`opencv-python` is pinned to `4.10.0.84` in `requirements.txt` — the current latest ships a broken build on macOS missing `cv2.CascadeClassifier` and the bundled Haar cascade XML files. Don't bump this pin without verifying `cv2.CascadeClassifier` and `cv2.data.haarcascades` still work.
+
+
+## Running the live pipeline
+
+```
+./venv/bin/python3 -m src.retailvision.pipeline_demo   # live camera preview with face-detection boxes
+./venv/bin/python3 -m src.retailvision.camera_test      # camera-only sanity check, no detection
+```
+
+Both open a live window; press `q` to quit. Currently reads only from the laptop's default camera (`cv2.VideoCapture(0)`); multi-camera support is planned but not yet implemented.
+
+## Module layout
+
+- `src/retailvision/camera_test.py` — minimal camera-open/read sanity check.
+- `src/retailvision/detection.py` — `FaceDetector`, wraps OpenCV's bundled Haar cascade classifier. First stage of the pipeline.
+- `src/retailvision/pipeline_demo.py` — wires capture → `FaceDetector` → live preview with drawn bounding boxes. Entry point later stages (demographics, emotion, tracking, zone scoring) get added onto.
+
+## Dataset preparation
+
+Datasets live under gitignored `data/<dataset>/raw/` (original downloads) and `data/<dataset>/processed/` (YOLOv8-classification-ready folder trees + a `distribution_report.json`). Human-readable documentation of sourcing, format decisions, and class distributions is tracked in `docs/datasets/`.
+
+```
+PYTHONPATH=scripts ./venv/bin/python3 scripts/prepare_utkface.py   # age/gender labels, see docs/datasets/utkface.md
+PYTHONPATH=scripts ./venv/bin/python3 scripts/prepare_fer2013.py   # 7 emotion classes, see docs/datasets/fer2013.md
+```
+
+Both datasets consist of pre-cropped single-face images, so they're prepared as YOLOv8 **classification** datasets (folder-per-class), face localization is a separate upstream pipeline stage.
+
+- **UTKFace** (`scripts/utkface_prep/`) — 33,481 images, age binned into `0-17`/`18-30`/`31-50`/`51+`, gender mapped to `Male`/`Female`, stratified 70/15/15 split. Known imbalance: White overrepresented ~5.5x across race labels (documented, not corrected).
+- **FER-2013** (`scripts/fer2013_prep/`) — 35,887 images across 7 emotion classes. Official test split kept untouched; a stratified 10% validation split is carved out of train. Known imbalance: Disgust is severely underrepresented (1.5% of data); Fear is normal-sized but documented as noisy/confusable with Sad and Surprise.
+
+## Model training
+
+Baseline classifiers are trained from scratch on the prepared datasets using `yolov8n-cls`. Age and gender are trained as two independent classifiers (YOLOv8 classification mode is single-label per run), even though both come from UTKFace. For the full history of decisions, results, and graphics behind the age/gender model line (dataset → baseline → fine-tune → real-world eval → rebinning → regression), see [`docs/models/README.md`](docs/models/README.md).
+
+```
+PYTHONPATH=scripts ./venv/bin/python3 scripts/train_age_gender_baseline.py     # trains age, then gender
+PYTHONPATH=scripts ./venv/bin/python3 scripts/evaluate_age_gender_baseline.py  # per-class precision/recall/F1, loss curves, report
+```
+
+- `scripts/age_gender_baseline/` — training/evaluation package (`constants.py`, `train.py`, `evaluate.py`, `plotting.py`).
+- Trained weights are saved to `models/age_gender/baseline_age.pt` and `baseline_gender.pt` (gitignored, like all `*.pt` files).
+- Evaluation writes `models/age_gender/baseline_report.json` and a loss/accuracy curve PNG per task. YOLOv8 classification mode reports top1/top5 accuracy rather than mAP@0.5 (a detection-mode metric); per-class precision/recall/F1 are computed separately via scikit-learn on the held-out test split.
+
+Fine-tuning builds on the baseline with augmentation and adjusted hyperparameters, retraining from `yolov8n-cls.pt` rather than continuing from the baseline weights (see `docs/models/age_gender_finetune.md` for why).
+
+```
+PYTHONPATH=scripts ./venv/bin/python3 scripts/finetune_age_gender.py           # trains age, then gender, with augmentation
+PYTHONPATH=scripts ./venv/bin/python3 scripts/evaluate_age_gender_finetune.py  # per-class metrics, loss curves, threshold check, report
+```
+
+- `scripts/age_gender_finetune/` — fine-tune training package (`constants.py`, `train.py`); reuses `age_gender_baseline`'s evaluation/plotting helpers, which are generic.
+- Final weights are saved to `models/age_gender/final_age.pt` and `final_gender.pt`.
+- Evaluation writes `models/age_gender/final_report.json`, checking top1 accuracy against the required 75% (age) / 85% (gender) thresholds per task.
+
+## Live demo
+
+To just watch the current classifiers and the age-regression model run on your own webcam, with no ground truth or logging needed:
+
+```
+PYTHONPATH=.:scripts ./venv/bin/python3 scripts/live_demo.py
+```
+
+Opens a live preview with each detected face boxed and labeled with its predicted age bin, continuous age estimate, gender, and confidence — e.g. `18-40 (~26y, 0.91) / Male (0.97)`. Always reflects whatever weights currently sit at `models/age_gender/final_age.pt`/`final_gender.pt`/`regression_age.pt`. Press `q` to quit. For accuracy evaluation (logging predictions against a known ground truth across conditions), see Real-world evaluation below instead.
+
+## Real-world evaluation
+
+The fine-tuned classifiers are also validated against live webcam video, not just the static UTKFace test set, to check whether test-set accuracy holds up under real capture conditions. See `docs/model_evaluation.md` for results — notably, gender classification generalizes well, while age classification degrades severely on live camera input regardless of condition, and face detection itself fails on faces angled past ~45°.
+
+```
+PYTHONPATH=.:scripts ./venv/bin/python3 scripts/evaluate_real_world.py --condition <name> --true-age <bin> --true-gender <Male|Female>
+PYTHONPATH=.:scripts ./venv/bin/python3 scripts/summarize_real_world_eval.py
+```
+
+- `scripts/real_world_eval/` — live-capture package (`constants.py`, `classify.py`, `capture.py`), reusing the existing `FaceDetector`.
+- Each condition session opens a live preview (green box = correct, red = wrong) and appends per-frame predictions to `runs/real_world_eval/<condition>.csv`; press `q` to stop.
+- Summarization writes `models/age_gender/real_world_eval_report.json`: face-detection rate and per-task accuracy per condition, compared against the RV-005 test-set accuracy.
+
+## Age regression (continuous age for live display)
+
+The 4-bin classifier is coarse for live feedback ("18-30" isn't very informative). A separate model predicts a continuous age (e.g. "~25") for display, while the classifier continues to handle analytics/reporting. An earlier attempt to solve this by re-binning the classifier into narrower classes (7, then 10) was abandoned — adult age brackets plateaued at 50-65% F1 regardless of tuning; see `docs/models/age_rebinning_investigation.md`. Regression sidesteps that ceiling entirely since there are no bin boundaries to be confused across.
+
+Ultralytics/YOLOv8 has no native regression task, so this model is a plain PyTorch/torchvision ResNet18 with a single-output regression head, trained separately from the YOLOv8 classifiers.
+
+```
+PYTHONPATH=scripts ./venv/bin/python3 scripts/prepare_age_regression.py    # builds train/val/test CSV manifests (path, age, gender)
+PYTHONPATH=scripts ./venv/bin/python3 scripts/train_age_regression.py      # trains with early stopping on validation MAE
+PYTHONPATH=scripts ./venv/bin/python3 scripts/evaluate_age_regression.py   # overall + per-age-group MAE on the held-out test split
+```
+
+- `scripts/age_regression_prep/` — builds CSV manifests instead of a folder-per-class layout (regression has no discrete classes); reuses `utkface_prep`'s filename parsing and stratified split.
+- `scripts/age_regression/` — training package (`dataset.py`, `model.py`, `train.py`, `evaluate.py`, `plotting.py`).
+- Weights saved to `models/age_gender/regression_age.pt`; evaluation writes `models/age_gender/regression_report.json` with overall MAE and MAE bucketed into the RV-005 4-bin ranges for a per-age-group breakdown (bucketing is for reporting only — the model itself is never trained against bins).
+- Runs alongside the 4-bin classifier in the live pipeline: classifier output for analytics, regression output for display.
