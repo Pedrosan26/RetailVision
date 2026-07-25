@@ -1,0 +1,52 @@
+{
+  "weights": "/Users/pedrosan/Desktop/Github/RetailVision/models/emotion/baseline.pt",
+  "top_k_accuracy": {
+    "top1_accuracy": 0.7112,
+    "top5_accuracy": 0.9922
+  },
+  "per_class_metrics": {
+    "angry": {
+      "precision": 0.614,
+      "recall": 0.6493,
+      "f1": 0.6312,
+      "support": 958
+    },
+    "disgust": {
+      "precision": 0.8182,
+      "recall": 0.6486,
+      "f1": 0.7236,
+      "support": 111
+    },
+    "fear": {
+      "precision": 0.6328,
+      "recall": 0.5234,
+      "f1": 0.573,
+      "support": 1024
+    },
+    "happy": {
+      "precision": 0.8796,
+      "recall": 0.8935,
+      "f1": 0.8865,
+      "support": 1774
+    },
+    "neutral": {
+      "precision": 0.6371,
+      "recall": 0.6934,
+      "f1": 0.6641,
+      "support": 1233
+    },
+    "sad": {
+      "precision": 0.6051,
+      "recall": 0.5886,
+      "f1": 0.5967,
+      "support": 1247
+    },
+    "surprise": {
+      "precision": 0.803,
+      "recall": 0.8436,
+      "f1": 0.8228,
+      "support": 831
+    }
+  },
+  "loss_curve_plot": "/Users/pedrosan/Desktop/Github/RetailVision/models/emotion/baseline_loss_curves.png"
+}
