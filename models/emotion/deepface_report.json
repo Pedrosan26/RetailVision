@@ -1,0 +1,57 @@
+{
+  "model": "DeepFace facial_expression_model (pre-trained)",
+  "accuracy": 0.5637,
+  "min_class_recall_thresholds": {
+    "happy": 0.8,
+    "neutral": 0.8
+  },
+  "passed_thresholds": false,
+  "per_class_metrics": {
+    "angry": {
+      "precision": 0.5006,
+      "recall": 0.429,
+      "f1": 0.4621,
+      "support": 958
+    },
+    "disgust": {
+      "precision": 0.6364,
+      "recall": 0.4414,
+      "f1": 0.5213,
+      "support": 111
+    },
+    "fear": {
+      "precision": 0.3985,
+      "recall": 0.418,
+      "f1": 0.408,
+      "support": 1024
+    },
+    "happy": {
+      "precision": 0.7688,
+      "recall": 0.7683,
+      "f1": 0.7685,
+      "support": 1774,
+      "min_recall_threshold": 0.8,
+      "passed_threshold": false
+    },
+    "neutral": {
+      "precision": 0.4649,
+      "recall": 0.5588,
+      "f1": 0.5076,
+      "support": 1233,
+      "min_recall_threshold": 0.8,
+      "passed_threshold": false
+    },
+    "sad": {
+      "precision": 0.4343,
+      "recall": 0.4106,
+      "f1": 0.4221,
+      "support": 1247
+    },
+    "surprise": {
+      "precision": 0.7694,
+      "recall": 0.7148,
+      "f1": 0.7411,
+      "support": 831
+    }
+  }
+}

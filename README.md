@@ -82,6 +82,17 @@ PYTHONPATH=scripts ./venv/bin/python3 scripts/evaluate_emotion_baseline.py  # pe
 - Trained weights are saved to `models/emotion/baseline.pt`.
 - Evaluation writes `models/emotion/baseline_report.json` and a loss/accuracy curve PNG. See `docs/models/emotion_baseline.md` for full results and findings (71.12% top1; Fear is the weakest class as expected, but Disgust — despite being the most underrepresented class — outperforms several more common classes).
 
+Fine-tuning (RV-008) follows the same pattern as age/gender, plus a per-class recall bar (80% on Happy and Neutral specifically, not an aggregate threshold):
+
+```
+PYTHONPATH=scripts ./venv/bin/python3 scripts/finetune_emotion.py           # fine-tunes with augmentation
+PYTHONPATH=scripts ./venv/bin/python3 scripts/evaluate_emotion_finetune.py  # per-class metrics, loss curves, threshold check, report
+```
+
+- `scripts/emotion_finetune/` — fine-tune training package; reuses `emotion_baseline`'s evaluation/plotting helpers.
+- Final weights are saved to `models/emotion/final.pt`.
+- Neutral failed its 80% recall threshold across two fine-tuning iterations (67.6%, 67.3%) with confusion-matrix evidence of a structural neutral/sad overlap at FER-2013's 48×48 resolution. Per the ticket, DeepFace's pre-trained emotion model was evaluated as a fallback (`scripts/evaluate_emotion_deepface.py`) but performed worse on every class (56.4% vs. our 69.7% overall) and was rejected. Our fine-tuned classifier remains production; Neutral (alongside Fear/Disgust) is accepted as a documented limitation. Full investigation: `docs/models/emotion_finetune.md`.
+
 ## Live demo
 
 To just watch the current classifiers and the age-regression model run on your own webcam, with no ground truth or logging needed:
