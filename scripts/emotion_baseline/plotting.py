@@ -13,7 +13,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 
-def save_loss_curves(curves: dict, out_path: Path) -> None:
+def save_loss_curves(curves: dict, out_path: Path, title: str = "emotion baseline: loss & accuracy curves") -> None:
     """Plot every loss/accuracy column against epoch and save to out_path."""
     epochs = curves["epoch"]
     fig, ax = plt.subplots(figsize=(8, 5))
@@ -23,7 +23,7 @@ def save_loss_curves(curves: dict, out_path: Path) -> None:
         ax.plot(epochs, values, label=column)
     ax.set_xlabel("epoch")
     ax.set_ylabel("value")
-    ax.set_title("emotion baseline: loss & accuracy curves")
+    ax.set_title(title)
     ax.legend()
     fig.tight_layout()
     out_path.parent.mkdir(parents=True, exist_ok=True)

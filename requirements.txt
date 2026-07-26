@@ -5,3 +5,10 @@ ultralytics
 Pillow
 scikit-learn
 pandas
+# deepface + tf-keras: RET-9's DeepFace fallback comparison
+# (scripts/evaluate_emotion_deepface.py) only, not used in the production
+# pipeline — pulls in TensorFlow as a backend. tf-keras must be listed
+# explicitly: deepface's Keras-3-era release doesn't declare it as a
+# dependency even though its retinaface sub-dependency requires it.
+deepface
+tf-keras
