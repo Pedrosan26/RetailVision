@@ -1,16 +1,15 @@
 """
 constants.py
 
-Shared paths and hyperparameters for RV-008 emotion fine-tuning. Retrains
-from the original yolov8n-cls checkpoint (rather than continuing from the
-RV-007 baseline weights) so augmentation and a lower learning rate get a
+Shared paths and hyperparameters for emotion classifier fine-tuning.
+Retrains from the original yolov8n-cls checkpoint (rather than continuing
+from the baseline weights) so augmentation and a lower learning rate get a
 clean run instead of compounding the mild overfitting already present in
-baseline.pt past ~epoch 40 — same rationale as the age/gender fine-tune
-(RV-005).
+baseline.pt past ~epoch 40 — same rationale as the age/gender fine-tune.
 
-Hyperparameters reuse RV-005's recipe (epochs=60, batch=32, SGD, lr0=0.005,
-patience=15) as a reasonable first fine-tuning iteration for a
-similarly-sized single yolov8n-cls classification task.
+Hyperparameters reuse the age/gender fine-tune's recipe (epochs=60,
+batch=32, SGD, lr0=0.005, patience=15) as a reasonable first fine-tuning
+iteration for a similarly-sized single yolov8n-cls classification task.
 
 Augmentation follows the same philosophy as docs/datasets/utkface.md, with
 one dataset-specific adjustment: FER-2013 images are grayscale, so hue
@@ -63,9 +62,9 @@ AUGMENTATION = {
     "erasing": 0.0,
 }
 
-# RV-008 acceptance thresholds: per-class recall for the two classes the
-# ticket calls "commercially relevant for retail" — not an aggregate top1
-# bar like the age/gender tickets used.
+# Minimum acceptable per-class recall for the two classes considered
+# commercially relevant for retail — not an aggregate top1 bar like the
+# age/gender models use.
 MIN_CLASS_RECALL = {
     "happy": 0.80,
     "neutral": 0.80,

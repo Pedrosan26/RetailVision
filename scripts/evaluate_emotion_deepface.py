@@ -1,15 +1,15 @@
 """
 evaluate_emotion_deepface.py
 
-CLI entry point for RET-9's DeepFace fallback: evaluates DeepFace's
+CLI entry point for the DeepFace fallback comparison: evaluates DeepFace's
 pre-trained emotion model (itself trained on FER-2013) on the exact same
 held-out FER-2013 test split our custom yolov8n-cls classifier was
-evaluated on, for a direct, apples-to-apples comparison. Per RET-9's
-acceptance criteria, this fallback was triggered because two fine-tuning
-iterations of our own classifier both failed the 80% Neutral recall
-threshold, with confusion-matrix evidence pointing to a structural
-neutral/sad overlap rather than a fixable tuning problem — see
-docs/models/emotion_finetune.md for the full iteration history.
+evaluated on, for a direct, apples-to-apples comparison. This fallback was
+triggered because two fine-tuning iterations of our own classifier both
+failed the 80% Neutral recall threshold, with confusion-matrix evidence
+pointing to a structural neutral/sad overlap rather than a fixable tuning
+problem — see docs/models/emotion_finetune.md for the full iteration
+history.
 
 `detector_backend="skip"` and `enforce_detection=False` are used since
 FER-2013 images are already tightly-cropped single-face chips; DeepFace's
@@ -50,7 +50,7 @@ def run_test_predictions(data_dir: Path) -> tuple[list[str], list[str], list[str
 
 
 def main() -> None:
-    """Evaluate DeepFace's pre-trained emotion model and write the RET-9 fallback comparison report."""
+    """Evaluate DeepFace's pre-trained emotion model and write the fallback comparison report."""
     print("Running DeepFace emotion model on the FER-2013 test split...")
     y_true, y_pred, class_names = run_test_predictions(DATA_DIR)
     class_metrics = per_class_metrics(y_true, y_pred, class_names)

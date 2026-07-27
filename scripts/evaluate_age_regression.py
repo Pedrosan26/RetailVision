@@ -1,7 +1,7 @@
 """
 evaluate_age_regression.py
 
-CLI entry point for RET-31 evaluation: computes overall and per-age-group
+CLI entry point for age-regression evaluation: computes overall and per-age-group
 MAE for the trained regression model on the held-out UTKFace test split,
 and writes models/age_gender/regression_report.json. Run this after
 scripts/train_age_regression.py has finished.
@@ -17,7 +17,7 @@ from age_regression.evaluate import evaluate_regression
 
 
 def main() -> None:
-    """Evaluate the age-regression model and write the RET-31 metrics report."""
+    """Evaluate the age-regression model and write the metrics report."""
     device = resolve_device()
     report = evaluate_regression(device)
 

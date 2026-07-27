@@ -2,7 +2,7 @@
 plotting.py
 
 Saves train/val loss (and accuracy) curves to a PNG so they can be visually
-inspected for overfitting, per RV-007's acceptance criteria.
+inspected for overfitting.
 """
 
 from pathlib import Path

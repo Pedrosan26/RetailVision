@@ -2,9 +2,9 @@
 evaluate.py
 
 Evaluates the trained age-regression model on the held-out test manifest:
-overall MAE, plus MAE bucketed into the RV-005 4-bin age ranges for a
-per-age-group breakdown (RET-31's acceptance criteria), even though the
-model itself never saw those bins during training.
+overall MAE, plus MAE bucketed into the classifier's original 4-bin age
+ranges for a per-age-group breakdown, even though the model itself never
+saw those bins during training.
 """
 
 from pathlib import Path
@@ -18,7 +18,7 @@ from .model import build_model
 
 
 def _bucket_for_age(age: float) -> str:
-    """Map a raw age to its RV-005-style report bucket, for per-group MAE breakdown."""
+    """Map a raw age to its report bucket, for per-group MAE breakdown."""
     for low, high, label in REPORT_AGE_BUCKETS:
         if low <= age <= high:
             return label

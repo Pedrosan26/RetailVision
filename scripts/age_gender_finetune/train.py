@@ -4,7 +4,7 @@ train.py
 Runs a single yolov8n-cls fine-tuning job on one of the two UTKFace
 classification trees (age or gender), with augmentation enabled and
 learning rate, batch size, epoch count and patience adjusted from the
-RV-004 baseline defaults.
+the baseline defaults.
 """
 
 from pathlib import Path

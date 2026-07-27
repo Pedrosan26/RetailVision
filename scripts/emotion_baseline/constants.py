@@ -1,12 +1,11 @@
 """
 constants.py
 
-Shared paths and hyperparameters for the RV-007 emotion classifier
-baseline run: a single yolov8n-cls classifier trained on FER-2013's 7
-emotion classes. All hyperparameters are Ultralytics defaults except
-imgsz, set to the standard 224 classification resolution (640 is a
-detection-mode default, not a tuning choice) — same convention as the
-age/gender baseline (RV-004).
+Shared paths and hyperparameters for the emotion classifier baseline run:
+a single yolov8n-cls classifier trained on FER-2013's 7 emotion classes.
+All hyperparameters are Ultralytics defaults except imgsz, set to the
+standard 224 classification resolution (640 is a detection-mode default,
+not a tuning choice) — same convention as the age/gender baseline.
 """
 
 from pathlib import Path

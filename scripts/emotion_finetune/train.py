@@ -3,7 +3,7 @@ train.py
 
 Runs the yolov8n-cls fine-tuning job on the FER-2013 emotion
 classification tree, with augmentation enabled and learning rate, batch
-size, epoch count and patience adjusted from the RV-007 baseline defaults.
+size, epoch count and patience adjusted from the baseline defaults.
 """
 
 from ultralytics import YOLO

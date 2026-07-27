@@ -1,19 +1,18 @@
-# Emotion classifier fine-tune (RV-008)
+# Emotion classifier fine-tune
 
 ## Setup — iteration 1
 
 Retrained from the original `yolov8n-cls.pt` checkpoint (not continued
-from the RV-007 baseline weights), same rationale as the age/gender
-fine-tune (RV-005): avoid compounding the mild overfitting already
-present in `baseline.pt` past ~epoch 40. Hyperparameters reused RV-005's
-recipe as a reasonable first attempt for a similarly-sized single
-`yolov8n-cls` task — 60 epochs, batch 32, `optimizer="SGD"`, `lr0=0.005`,
-`patience=15` — plus augmentation adapted from `docs/datasets/utkface.md`'s
-philosophy, with one FER-2013-specific change: `hsv_h`/`hsv_s` (hue,
-saturation) were dropped entirely since FER-2013 is grayscale — a
-zero-saturation pixel has no hue to shift, so those two would be pure
-no-ops. `hsv_v` (brightness) was kept since it still affects grayscale
-pixel intensity.
+from the baseline weights), same rationale as the age/gender fine-tune:
+avoid compounding the mild overfitting already present in `baseline.pt`
+past ~epoch 40. Hyperparameters reused the age/gender fine-tune's recipe
+as a reasonable first attempt for a similarly-sized single `yolov8n-cls`
+task — 60 epochs, batch 32, `optimizer="SGD"`, `lr0=0.005`, `patience=15`
+— plus augmentation adapted from `docs/datasets/utkface.md`'s philosophy,
+with one FER-2013-specific change: `hsv_h`/`hsv_s` (hue, saturation) were
+dropped entirely since FER-2013 is grayscale — a zero-saturation pixel has
+no hue to shift, so those two would be pure no-ops. `hsv_v` (brightness)
+was kept since it still affects grayscale pixel intensity.
 
 ```python
 AUGMENTATION = {
@@ -25,19 +24,19 @@ AUGMENTATION = {
 Ran the full 60 epochs; `patience=15` was not triggered (best epoch was
 52, only 8 epochs short of the cap).
 
-## Threshold check (RV-008 acceptance criteria)
+## Threshold check
 
-Unlike the age/gender tickets (aggregate top1 threshold), RV-008's bar is
-**per-class recall** on the two classes the ticket calls "commercially
-relevant for retail":
+Unlike the age/gender models (aggregate top1 threshold), the required bar
+here is **per-class recall** on the two classes considered commercially
+relevant for retail:
 
 | Class | Recall | Threshold | Result |
 |---|---|---|---|
 | Happy | 88.78% | 80% | **PASS** |
 | Neutral | 67.56% | 80% | **FAIL** |
 
-Fear and Disgust are explicitly not held to a threshold — the ticket
-pre-flags both as expected known limitations.
+Fear and Disgust are explicitly not held to a threshold — both are
+pre-flagged as expected known limitations.
 
 ## Full results — iteration 1
 
@@ -59,7 +58,7 @@ pre-flags both as expected known limitations.
 Fine-tuning made things **slightly worse across almost every class**, not
 better — top1 fell 1.43 points, and every class except surprise (flat)
 lost F1 versus the baseline. This is a materially different (and worse)
-outcome than RV-005's fine-tune, which was merely flat on its weak
+outcome than the age/gender fine-tune, which was merely flat on its weak
 classes rather than actively regressing.
 
 ## Why Neutral failed — confirmed via confusion matrix, not guessed
@@ -72,7 +71,7 @@ confusion, well ahead of the next leaks (fear 10%, happy 10%, angry 7%).
 This is a genuine visual-overlap problem between two "medium energy"
 expressions, the same category of issue flagged in
 `docs/models/emotion_baseline.md`'s findings section and structurally
-similar to the age classifier's original 18-30/31-50 confusion (RV-004).
+similar to the age classifier's original 18-30/31-50 confusion.
 
 ## Training health — overfitting set in earlier and more sharply than baseline
 
@@ -82,19 +81,20 @@ Val loss climbs almost the entire run: it dips only briefly to ~0.87 by
 epoch 22, then rises steadily to 1.02 by epoch 60, while train loss keeps
 falling (1.67 → 0.23) — a much more pronounced and earlier-onset
 overfitting signature than the baseline showed (which didn't turn until
-~epoch 38-40). Unlike the 6-bin age classifier's pattern (RV-31), where
-validation accuracy kept climbing despite rising val loss, here **both**
-val loss rose **and** top1 plateaued/dipped from its epoch-52 peak — a
-less benign signature than anything seen in this project so far.
+~epoch 38-40). Unlike the 6-bin age classifier's pattern, where validation
+accuracy kept climbing despite rising val loss, here **both** val loss
+rose **and** top1 plateaued/dipped from its epoch-52 peak — a less benign
+signature than anything seen in this project so far.
 
 ## Hypothesis: augmentation intensity, not learning rate/schedule
 
-The augmentation recipe was carried over from RV-005 (UTKFace) without
-adjusting for FER-2013's very different source resolution. UTKFace source
-photos are full-resolution studio crops; FER-2013 images are natively
-**48×48**, upscaled ~4.7x to the model's 224 input size — so any
-augmentation that occludes or distorts a fixed *fraction* of the image
-removes proportionally far more of the (already limited) signal.
+The augmentation recipe was carried over from the age/gender fine-tune
+(UTKFace) without adjusting for FER-2013's very different source
+resolution. UTKFace source photos are full-resolution studio crops;
+FER-2013 images are natively **48×48**, upscaled ~4.7x to the model's 224
+input size — so any augmentation that occludes or distorts a fixed
+*fraction* of the image removes proportionally far more of the (already
+limited) signal.
 
 Two specific suspects:
 
@@ -115,9 +115,7 @@ issue) — but it is not confirmed. Iteration 2 is the test.
 
 ## Iteration 2: reduced augmentation — hypothesis rejected
 
-Per the ticket's explicit allowance ("if model fails to converge → fall
-back to DeepFace..." — read together with RV-005's established
-two-strikes precedent), a second iteration was run before falling back,
+A second iteration was run before falling back to an alternative model,
 reducing exactly the augmentation terms suspected above and changing
 nothing else:
 
@@ -147,10 +145,11 @@ preserved at `models/emotion/final_iter2.pt` /
 
 ## DeepFace fallback: evaluated and rejected
 
-Per the ticket's fallback clause, DeepFace's pre-trained emotion model
-(`facial_expression_model`, itself trained on FER-2013 — same 7-class
-taxonomy, so a direct comparison) was evaluated on the identical held-out
-FER-2013 test split, via `scripts/evaluate_emotion_deepface.py`
+After two fine-tuning iterations both failed the Neutral threshold,
+DeepFace's pre-trained emotion model (`facial_expression_model`, itself
+trained on FER-2013 — same 7-class taxonomy, so a direct comparison) was
+evaluated as an alternative, on the identical held-out FER-2013 test
+split, via `scripts/evaluate_emotion_deepface.py`
 (`enforce_detection=False`, `detector_backend="skip"`, since these images
 are already tightly-cropped single-face chips).
 
@@ -172,7 +171,7 @@ easily). Full report: `models/emotion/deepface_report.json`.
 
 ## Final decision
 
-**Reject the DeepFace fallback and keep our own fine-tuned classifier
+**Reject the DeepFace alternative and keep our own fine-tuned classifier
 (iteration 1) as the production emotion model.** Switching to DeepFace
 would be a strict regression on every class, including the one class
 (Happy) that already passes. `models/emotion/final.pt` has been restored
@@ -180,8 +179,9 @@ to iteration 1's weights (the marginally better of the two iterations on
 both threshold metrics).
 
 **Neutral is accepted as a documented known limitation**, alongside Fear
-and Disgust (which the ticket already pre-flagged). This is now backed by
-three independent pieces of evidence rather than one tuning attempt:
+and Disgust (already pre-flagged as expected weak classes). This is now
+backed by three independent pieces of evidence rather than one tuning
+attempt:
 
 1. Two fine-tuning iterations with substantially different augmentation
    intensity produced nearly identical Neutral recall (67.56%, 67.32%).
@@ -193,7 +193,7 @@ three independent pieces of evidence rather than one tuning attempt:
 
 Together these point to a genuine ceiling in FER-2013 at 48×48 resolution
 for separating "neutral" from "sad," not a fixable modeling choice —
-structurally the same kind of finding as RV-008's age-rebinning
+structurally the same kind of finding as the age classifier's rebinning
 investigation (`docs/models/age_rebinning_investigation.md`): some
 classification boundaries aren't reliably recoverable from the available
 visual signal, regardless of how much tuning is thrown at them.
