@@ -211,7 +211,7 @@ at the aggregate accuracy number — found the real cause immediately:
 
 | Misdetected (mannequin in background) | Correct (real face) |
 |---|---|
-| ![Mannequin misdetected as angry](../runs/debug_close_1m_happy/0004_angry_0.82.jpg) | ![Correctly classified happy](../runs/debug_close_1m_happy/0100_happy_1.00.jpg) |
+| ![Mannequin misdetected as angry](images/emotion_close_range_mannequin_misdetect.jpg) | ![Correctly classified happy](images/emotion_close_range_correct.jpg) |
 
 A mannequin behind the subject has painted eyes and lips — enough for the
 Haar cascade to detect it as a face, and for the classifier to read its
@@ -345,11 +345,17 @@ nice-to-have.
 
 ## Artifacts
 
+Raw per-frame logs, the JSON report, and the full set of diagnostic face
+crops are local working data (regenerable by re-running the tooling
+below), not committed to the repository — only this document and the two
+illustrative images above are. Locally, they live at:
+
 - Per-frame session logs: `runs/emotion_real_world_eval/{condition}__{emotion}.csv`
 - Excluded contaminated sessions (preserved, not deleted): `runs/emotion_real_world_eval/excluded_contaminated/`
 - Diagnostic face-crop captures (Finding 1): `runs/debug_close_1m_happy/`
 - Aggregated report (full matrix + condition/emotion averages): `models/emotion/real_world_eval_report.json`
-- Evaluation tooling: `scripts/emotion_real_world_eval/`,
+
+Evaluation tooling: `scripts/emotion_real_world_eval/`,
   `scripts/evaluate_emotion_real_world.py`,
   `scripts/summarize_emotion_real_world_eval.py`,
   `scripts/debug_emotion_crops.py`
