@@ -1,9 +1,10 @@
 """
 summarize_real_world_eval.py
 
-CLI entry point for RV-006 aggregation: reads every per-condition CSV
-logged by scripts/evaluate_real_world.py, computes face-detection rate and
-age/gender accuracy per condition, compares each against the RV-005
+CLI entry point for the age/gender classifiers' real-world evaluation
+aggregation: reads every per-condition CSV logged by
+scripts/evaluate_real_world.py, computes face-detection rate and
+age/gender accuracy per condition, compares each against the fine-tuned
 held-out test-set accuracy (models/age_gender/final_report.json) to
 quantify degradation, and writes the combined numbers to
 models/age_gender/real_world_eval_report.json. Use this report as the
@@ -40,7 +41,7 @@ def summarize_condition(csv_path) -> dict:
 
 
 def main() -> None:
-    """Aggregate every condition CSV under LOG_DIR and write the RV-006 report."""
+    """Aggregate every condition CSV under LOG_DIR and write the real-world evaluation report."""
     baseline = json.loads(FINETUNE_REPORT_PATH.read_text())
     test_set_accuracy = {
         "age": baseline["age"]["top_k_accuracy"]["top1_accuracy"],

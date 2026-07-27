@@ -1,7 +1,7 @@
 """
 train_age_gender_baseline.py
 
-CLI entry point for RV-004: trains two yolov8n-cls baseline classifiers on
+CLI entry point that trains two yolov8n-cls baseline classifiers on
 UTKFace (age-group, gender) using Ultralytics default hyperparameters, and
 copies the best checkpoint of each into models/age_gender/. This is a long
 running job (100 epochs x 2 tasks) intended to run to completion unattended;

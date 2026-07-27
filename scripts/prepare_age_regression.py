@@ -1,9 +1,9 @@
 """
 prepare_age_regression.py
 
-CLI entry point for RET-31 data preparation: parses raw UTKFace filenames,
-builds the same stratified 70/15/15 split as the classification pipeline
-(RV-002), and writes CSV manifests (image path + continuous age) instead
+CLI entry point for age-regression data preparation: parses raw UTKFace
+filenames, builds the same stratified 70/15/15 split as the classification
+pipeline, and writes CSV manifests (image path + continuous age) instead
 of a folder-per-class layout, since regression has no discrete classes.
 Reuses utkface_prep's scanning/splitting/report logic directly.
 
@@ -25,7 +25,7 @@ def main() -> None:
     records, skipped = collect_records()
     print(f"Found {len(records)} valid images, skipped {len(skipped)} malformed/duplicate filenames.")
 
-    print("Building stratified 70/15/15 train/val/test split (same methodology as RV-002)...")
+    print("Building stratified 70/15/15 train/val/test split (same methodology as the classification pipeline)...")
     splits = stratified_split(records)
     for split_name, split_records in splits.items():
         print(f"  {split_name}: {len(split_records)} images")

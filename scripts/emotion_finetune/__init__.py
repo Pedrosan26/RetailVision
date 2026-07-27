@@ -1,1 +1,1 @@
-"""Fine-tuned YOLOv8 classifier training for FER-2013 emotion (RV-008)."""
+"""Fine-tuned YOLOv8 classifier training for FER-2013 emotion."""

@@ -1,7 +1,7 @@
 """
 evaluate_emotion_baseline.py
 
-CLI entry point for RV-007 evaluation: computes top1/top5 accuracy and
+CLI entry point for baseline evaluation: computes top1/top5 accuracy and
 per-class precision/recall/F1 on the held-out FER-2013 test split, saves a
 loss/accuracy curve plot, and writes baseline_report.json. Run this after
 scripts/train_emotion_baseline.py has finished.
@@ -23,7 +23,7 @@ from ultralytics import YOLO
 
 
 def main() -> None:
-    """Evaluate the emotion baseline and write the RV-007 metrics report."""
+    """Evaluate the emotion baseline and write the metrics report."""
     device = resolve_device()
     model = YOLO(str(WEIGHTS_PATH))
 

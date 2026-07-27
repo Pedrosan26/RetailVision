@@ -1,4 +1,4 @@
-# Age/gender baseline classifiers (RV-004)
+# Age/gender baseline classifiers
 
 ## Setup
 
@@ -63,10 +63,10 @@ slightly by epoch 100 (83.59%). This is a mild overfitting signature — the
 model kept fitting the training set past ~epoch 70 without further
 generalization gains.
 
-## Implications for RV-005 (fine-tuning)
+## Implications for fine-tuning
 
-- **Gender**: near production-ready as-is; low priority for RV-005 effort.
-- **Age**: the model to focus on. Candidates for RV-005:
+- **Gender**: near production-ready as-is; low priority for further fine-tuning effort.
+- **Age**: the model to focus on. Candidates for fine-tuning:
   - Earlier stopping (`patience` ~20-30 instead of 100), or restore the
     checkpoint around epoch 70-90 rather than the final epoch.
   - Target the `18-30`/`31-50` confusion specifically — stronger

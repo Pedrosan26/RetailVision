@@ -1,4 +1,4 @@
-# Emotion classifier baseline (RV-007)
+# Emotion classifier baseline
 
 ## Setup
 
@@ -38,9 +38,9 @@ per `scripts/emotion_baseline/evaluate.py`. Full numbers in
 
 ## Findings — partial confirmation of the expected weak spots
 
-The ticket flagged Fear and Disgust as expected underperformers given
-FER-2013's known noise. **Fear is indeed the weakest class** (F1 0.573,
-lowest recall at 0.523) — confirmed as expected.
+Fear and Disgust were expected to underperform given FER-2013's known
+noise. **Fear is indeed the weakest class** (F1 0.573, lowest recall at
+0.523) — confirmed as expected.
 
 **Disgust is a more interesting case.** Despite being badly
 underrepresented (392 of ~25,837 train images, ~1.5% of the data — by far
@@ -71,14 +71,14 @@ run.
 Train loss falls monotonically the whole run (1.62 → 0.35). Val loss
 bottoms around epoch 38-40 (~0.83) then climbs steadily to 0.92 by epoch
 100 — a mild overfitting signature, similar timing to the age
-classifier's original 4-bin baseline (RV-004). However, validation top1
+classifier's original 4-bin baseline. However, validation top1
 accuracy doesn't reverse alongside it: it plateaus around 70-71% from
 epoch ~40 onward and holds there for the rest of the run rather than
 declining. This suggests the model's *confidence calibration* degrades
 past epoch 40 (rising val loss) without its actual *decisions* getting
 worse (flat accuracy) — a candidate for earlier stopping (`patience`
-~15-20) in a fine-tuning pass, matching the RV-005 playbook for the age
-classifier.
+~15-20) in a fine-tuning pass, matching the age classifier fine-tune's
+playbook.
 
 ## Artifacts
 
@@ -88,5 +88,5 @@ classifier.
 - Raw per-epoch log: `runs/emotion_baseline/emotion/results.csv`
 
 Not yet integrated into the live pipeline (`pipeline_demo.py`) — this is
-a standalone classifier. Next: RV-008 (RET-9) fine-tuning with
-augmentation and tuned hyperparameters, same pattern as RV-005.
+a standalone classifier. Next: fine-tuning with augmentation and tuned
+hyperparameters, same pattern as the age/gender fine-tune.

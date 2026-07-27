@@ -1,21 +1,22 @@
-# Age/gender results — asymmetric 6-bin scheme (RET-31)
+# Age/gender results — asymmetric 6-bin scheme
 
 ## Setup
 
 Both the baseline and fine-tuned classifiers were retrained from scratch
 against the asymmetric 6-bin age scheme (`0-5`, `6-12`, `13-17`, `18-40`,
-`41-64`, `65+`) adopted after RV-008's findings — see
+`41-64`, `65+`) adopted after the rebinning investigation's findings — see
 `docs/datasets/utkface.md` ("Why these bins") and
 `docs/models/age_rebinning_investigation.md` for the reasoning: keep every
-bin that RV-008 proved reliable exactly as fine as it was, and merge the
-entire adult range that plateaued regardless of tuning into one bucket.
+bin that investigation proved reliable exactly as fine as it was, and merge
+the entire adult range that plateaued regardless of tuning into one bucket.
 
-Same methodology as RV-004/RV-005 throughout — baseline uses Ultralytics
-defaults (100 epochs, `imgsz=224`), fine-tune retrains from `yolov8n-cls.pt`
-with augmentation and adjusted hyperparameters (60 epochs, batch 32,
-`optimizer="SGD"`, `lr0=0.005`, `patience=15`). Gender is unaffected by any
-of this (bins are an age-only concept) and is included only because both
-scripts always train/evaluate both tasks together.
+Same methodology as the original 4-bin baseline/fine-tune throughout —
+baseline uses Ultralytics defaults (100 epochs, `imgsz=224`), fine-tune
+retrains from `yolov8n-cls.pt` with augmentation and adjusted
+hyperparameters (60 epochs, batch 32, `optimizer="SGD"`, `lr0=0.005`,
+`patience=15`). Gender is unaffected by any of this (bins are an age-only
+concept) and is included only because both scripts always train/evaluate
+both tasks together.
 
 Both stages ran back-to-back overnight; total wall time ~11.6h.
 
@@ -23,9 +24,9 @@ Both stages ran back-to-back overnight; total wall time ~11.6h.
 
 | Scheme | Age accuracy | Gender accuracy | Age threshold (75%) |
 |---|---|---|---|
-| RV-005 — uniform 4-bin | 84.87% | 96.40% | PASS |
-| RV-008 — uniform 10-bin (abandoned) | 69.36% | 96.81% | FAIL |
-| **RET-31 — asymmetric 6-bin** | **88.77%** | **96.34%** | **PASS** |
+| Uniform 4-bin (original) | 84.87% | 96.40% | PASS |
+| Uniform 10-bin (abandoned) | 69.36% | 96.81% | FAIL |
+| **Asymmetric 6-bin (current)** | **88.77%** | **96.34%** | **PASS** |
 
 The 6-bin scheme beats the original 4-bin classifier outright — not just
 avoiding the 10-bin's collapse, but improving on the scheme that never had
@@ -60,11 +61,12 @@ every prior run, unaffected by the age rebinning.
 
 **Age (fine-tuned)**: val loss bottoms around epoch 32-33 (0.377) and ticks
 up slightly afterward (to ~0.42 by epoch 60) — but unlike every previous
-age model (RV-004, RV-005, and RV-008's baseline/fine-tune), **validation
-accuracy kept climbing anyway**, from 88.6% at epoch 41 to 88.95% by
-epoch 51, rather than reversing once val loss passed its minimum. The
-baseline (100-epoch run) shows the same pattern: val loss bottoms ~epoch 70
-(0.368), accuracy still climbs to 87.98% by epoch 100.
+age model (the original 4-bin baseline/fine-tune, and the abandoned 10-bin
+baseline/fine-tune), **validation accuracy kept climbing anyway**, from
+88.6% at epoch 41 to 88.95% by epoch 51, rather than reversing once val
+loss passed its minimum. The baseline (100-epoch run) shows the same
+pattern: val loss bottoms ~epoch 70 (0.368), accuracy still climbs to
+87.98% by epoch 100.
 
 **Gender (fine-tuned)**: val loss flat and low from ~epoch 30 onward
 (~0.127-0.130), accuracy still inching up at the end (96.3%+) — consistent
@@ -83,7 +85,7 @@ The healthier curves likely reflect the coarser, more separable classes
 - Loss curves: `models/age_gender/{baseline,final}_{age,gender}_loss_curves.png`
 - Raw per-epoch logs: `runs/age_gender_{baseline,finetune}/{age,gender}/results.csv`
 
-`final_age.pt` / `final_gender.pt` are the current production classifiers
-on this branch, used for analytics-style demographic buckets. The
-continuous age-regression model (RET-31, separate pipeline) covers the
-finer-grained live-display estimate.
+`final_age.pt` / `final_gender.pt` are the current production classifiers,
+used for analytics-style demographic buckets. The continuous
+age-regression model (separate pipeline) covers the finer-grained
+live-display estimate.

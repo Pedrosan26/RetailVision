@@ -1,1 +1,1 @@
-"""Continuous age-regression model training and evaluation for UTKFace (RET-31)."""
+"""Continuous age-regression model training and evaluation for UTKFace."""

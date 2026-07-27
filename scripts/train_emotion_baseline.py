@@ -1,7 +1,7 @@
 """
 train_emotion_baseline.py
 
-CLI entry point for RV-007: trains a yolov8n-cls baseline classifier on
+CLI entry point that trains a yolov8n-cls baseline classifier on
 FER-2013 (7 emotion classes) using Ultralytics default hyperparameters,
 and copies the best checkpoint to models/emotion/baseline.pt. This is a
 long-running job (100 epochs) intended to run to completion unattended;
