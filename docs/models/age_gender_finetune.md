@@ -1,8 +1,8 @@
-# Age/gender fine-tuned classifiers (RV-005)
+# Age/gender fine-tuned classifiers
 
 ## Setup
 
-One additional training iteration on top of the RV-004 baseline
+One additional training iteration on top of the baseline
 (`docs/models/age_gender_baseline.md`), retraining from the original
 `yolov8n-cls.pt` checkpoint rather than continuing from the baseline
 weights, to avoid compounding the mild overfitting already present in
@@ -23,7 +23,7 @@ Augmentation enabled (none was used in the baseline, which needed to be a
 faithful "defaults" floor): `fliplr=0.5` (horizontal flip), `hsv_s=0.3` /
 `hsv_v=0.2` (brightness/contrast), `translate=0.1` / `scale=0.2` (random
 crop/zoom jitter), `degrees=10`, `erasing=0.2`. Strategy and rationale
-decided in `docs/datasets/utkface.md` (RV-003).
+decided in `docs/datasets/utkface.md`.
 
 **Note on a bug caught during smoke-testing**: Ultralytics' default
 `optimizer="auto"` silently ignores any explicitly-passed `lr0` and picks
@@ -37,7 +37,7 @@ Both classifiers ran the full 60 epochs — `patience=15` did not trigger
 early stopping, meaning validation metrics kept improving or plateauing
 within the patience window throughout.
 
-## Results vs. RV-005 thresholds (top1 accuracy, held-out test split)
+## Results vs. required thresholds (top1 accuracy, held-out test split)
 
 | Task | Threshold | Result | Status |
 |---|---|---|---|
@@ -71,7 +71,7 @@ without introducing overfitting.
 top1 is essentially flat vs. baseline (84.87% vs. 84.43%), and per-class F1
 for the confusable middle brackets is unchanged (`18-30`: 0.822 → 0.817,
 `31-50`: 0.718 → 0.732). The augmentation and hyperparameter changes did
-not fix the `18-30`/`31-50` confusion identified in RV-004.
+not fix the `18-30`/`31-50` confusion identified in the baseline.
 
 More notably, the overfitting signature got **worse in timing**, not
 better: val loss now bottoms out at epoch 22 (0.4247) and rises steadily
@@ -82,12 +82,12 @@ faster-decaying LR schedule likely caused the model to reach its best
 generalization point earlier in training rather than later.
 
 **Decision**: accepted as-is rather than spending a second iteration,
-since the ticket's bar is clearing 75% (done) and running one additional
+since the required bar is clearing 75% (done) and running one additional
 iteration with augmentation/tuned hyperparameters (done) — not requiring
 strict improvement over the baseline. Documenting this as an explicit
 finding rather than treating it as a hidden regression: the age model is
-not meaningfully better than the RV-004 baseline, and if further work on
-age classification is picked up later, the fix should target the
+not meaningfully better than the baseline, and if further work on age
+classification is picked up later, the fix should target the
 `18-30`/`31-50` boundary specifically (data quality, class-weighted loss,
 or reconsidering the bin boundaries) rather than more of the same
 hyperparameter tuning — and should stop training around epoch 20-25

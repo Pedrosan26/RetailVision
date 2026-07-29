@@ -1,18 +1,18 @@
 """
 evaluate_age_gender_finetune.py
 
-CLI entry point for RV-005 evaluation: for each fine-tuned model (age,
+CLI entry point for fine-tune evaluation: for each fine-tuned model (age,
 gender), computes top1/top5 accuracy and per-class precision/recall/F1 on
 the held-out UTKFace test split, saves a loss/accuracy curve plot, checks
-top1 accuracy against RV-005's minimum thresholds (75% age, 85% gender),
-and writes a combined final_report.json. Run this after
+top1 accuracy against the minimum required thresholds (75% age, 85%
+gender), and writes a combined final_report.json. Run this after
 scripts/finetune_age_gender.py has finished.
 
 If either task fails its threshold after two fine-tuning iterations, do not
-attempt a third automatically — per the ticket, fall back to pre-trained
-DeepFace weights for that task and document the decision (why fine-tuning
-didn't clear the bar, what DeepFace provides instead) rather than looping
-on hyperparameters indefinitely.
+attempt a third automatically — fall back to pre-trained DeepFace weights
+for that task and document the decision (why fine-tuning didn't clear the
+bar, what DeepFace provides instead) rather than looping on hyperparameters
+indefinitely.
 
 Usage: PYTHONPATH=scripts ./venv/bin/python3 scripts/evaluate_age_gender_finetune.py
 """
@@ -26,7 +26,7 @@ from ultralytics import YOLO
 
 
 def main() -> None:
-    """Evaluate both fine-tuned models, check thresholds, and write the RV-005 report."""
+    """Evaluate both fine-tuned models, check thresholds, and write the final report."""
     device = resolve_device()
     report: dict = {}
     all_passed = True
@@ -69,7 +69,7 @@ def main() -> None:
     print(f"\nFinal report written to {REPORT_PATH}")
     if not all_passed:
         print(
-            "\nOne or more tasks did not clear their RV-005 accuracy threshold. "
+            "\nOne or more tasks did not clear their required accuracy threshold. "
             "If this is the second fine-tuning iteration for that task, fall back "
             "to pre-trained DeepFace weights and document the decision instead of "
             "running a third iteration."

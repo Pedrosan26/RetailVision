@@ -1,0 +1,61 @@
+{
+  "weights": "/Users/pedrosan/Desktop/Github/RetailVision/models/emotion/final.pt",
+  "top_k_accuracy": {
+    "top1_accuracy": 0.6952,
+    "top5_accuracy": 0.9862
+  },
+  "min_class_recall_thresholds": {
+    "happy": 0.8,
+    "neutral": 0.8
+  },
+  "passed_thresholds": false,
+  "per_class_metrics": {
+    "angry": {
+      "precision": 0.5921,
+      "recall": 0.6409,
+      "f1": 0.6155,
+      "support": 958
+    },
+    "disgust": {
+      "precision": 0.7282,
+      "recall": 0.6757,
+      "f1": 0.7009,
+      "support": 111
+    },
+    "fear": {
+      "precision": 0.5905,
+      "recall": 0.5098,
+      "f1": 0.5472,
+      "support": 1024
+    },
+    "happy": {
+      "precision": 0.876,
+      "recall": 0.8844,
+      "f1": 0.8802,
+      "support": 1774,
+      "min_recall_threshold": 0.8,
+      "passed_threshold": true
+    },
+    "neutral": {
+      "precision": 0.6176,
+      "recall": 0.6732,
+      "f1": 0.6442,
+      "support": 1233,
+      "min_recall_threshold": 0.8,
+      "passed_threshold": false
+    },
+    "sad": {
+      "precision": 0.5978,
+      "recall": 0.5565,
+      "f1": 0.5764,
+      "support": 1247
+    },
+    "surprise": {
+      "precision": 0.7995,
+      "recall": 0.8255,
+      "f1": 0.8123,
+      "support": 831
+    }
+  },
+  "loss_curve_plot": "/Users/pedrosan/Desktop/Github/RetailVision/models/emotion/final_loss_curves.png"
+}

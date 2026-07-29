@@ -1,8 +1,8 @@
 """
 constants.py
 
-Shared paths and hyperparameters for the RET-31 age-regression model. Uses
-a plain torchvision ResNet18 backbone with a single-output regression head
+Shared paths and hyperparameters for the age-regression model. Uses a
+plain torchvision ResNet18 backbone with a single-output regression head
 rather than YOLOv8/Ultralytics, since Ultralytics has no native regression
 task (only detect, classify, pose, segment, obb, semantic).
 """
@@ -27,7 +27,7 @@ PATIENCE = 5  # epochs without val-MAE improvement before early stopping
 RANDOM_SEED = 42
 
 # Boundaries used only to bucket the continuous predictions for per-decade
-# MAE reporting (RET-31 acceptance criteria) — not used for training.
+# MAE reporting — not used for training.
 REPORT_AGE_BUCKETS = [
     (0, 17, "0-17"),
     (18, 30, "18-30"),

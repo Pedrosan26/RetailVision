@@ -2,10 +2,9 @@
 report.py
 
 Builds the distribution report documenting class balance across age
-group, gender, and race, both overall and per split. This is what
-Week 6's imbalance documentation (RV-002 acceptance criteria) is
-generated from, so accuracy gaps on underrepresented groups are
-explainable rather than a surprise during evaluation.
+group, gender, and race, both overall and per split, so accuracy gaps on
+underrepresented groups are explainable rather than a surprise during
+evaluation.
 """
 
 from collections import defaultdict

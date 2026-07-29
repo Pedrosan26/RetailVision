@@ -1,7 +1,7 @@
 """
 train_age_regression.py
 
-CLI entry point for RET-31: trains the ResNet18-based age-regression
+CLI entry point that trains the ResNet18-based age-regression
 model on the UTKFace manifests produced by scripts/prepare_age_regression.py,
 with early stopping on validation MAE. Saves the best checkpoint to
 models/age_gender/regression_age.pt and a loss/MAE curve plot. Run

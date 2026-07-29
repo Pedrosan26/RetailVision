@@ -69,6 +69,30 @@ PYTHONPATH=scripts ./venv/bin/python3 scripts/evaluate_age_gender_finetune.py  #
 - Final weights are saved to `models/age_gender/final_age.pt` and `final_gender.pt`.
 - Evaluation writes `models/age_gender/final_report.json`, checking top1 accuracy against the required 75% (age) / 85% (gender) thresholds per task.
 
+### Emotion classifier
+
+A single `yolov8n-cls` classifier trained from scratch on FER-2013 (7 emotion classes), same baseline methodology as age/gender: Ultralytics defaults, 100 epochs, `imgsz=224`.
+
+```
+PYTHONPATH=scripts ./venv/bin/python3 scripts/train_emotion_baseline.py     # trains the emotion classifier
+PYTHONPATH=scripts ./venv/bin/python3 scripts/evaluate_emotion_baseline.py  # per-class precision/recall/F1, loss curves, report
+```
+
+- `scripts/emotion_baseline/` — training/evaluation package (`constants.py`, `train.py`, `evaluate.py`, `plotting.py`), mirroring `age_gender_baseline/`'s structure.
+- Trained weights are saved to `models/emotion/baseline.pt`.
+- Evaluation writes `models/emotion/baseline_report.json` and a loss/accuracy curve PNG. See `docs/models/emotion_baseline.md` for full results and findings (71.12% top1; Fear is the weakest class as expected, but Disgust — despite being the most underrepresented class — outperforms several more common classes).
+
+Fine-tuning follows the same pattern as age/gender, plus a per-class recall bar (80% on Happy and Neutral specifically, not an aggregate threshold):
+
+```
+PYTHONPATH=scripts ./venv/bin/python3 scripts/finetune_emotion.py           # fine-tunes with augmentation
+PYTHONPATH=scripts ./venv/bin/python3 scripts/evaluate_emotion_finetune.py  # per-class metrics, loss curves, threshold check, report
+```
+
+- `scripts/emotion_finetune/` — fine-tune training package; reuses `emotion_baseline`'s evaluation/plotting helpers.
+- Final weights are saved to `models/emotion/final.pt`.
+- Neutral failed its 80% recall threshold across two fine-tuning iterations (67.6%, 67.3%) with confusion-matrix evidence of a structural neutral/sad overlap at FER-2013's 48×48 resolution. DeepFace's pre-trained emotion model was evaluated as an alternative (`scripts/evaluate_emotion_deepface.py`) but performed worse on every class (56.4% vs. our 69.7% overall) and was rejected. Our fine-tuned classifier remains production; Neutral (alongside Fear/Disgust) is accepted as a documented limitation. Full investigation: `docs/models/emotion_finetune.md`.
+
 ## Live demo
 
 To just watch the current classifiers and the age-regression model run on your own webcam, with no ground truth or logging needed:
@@ -81,7 +105,9 @@ Opens a live preview with each detected face boxed and labeled with its predicte
 
 ## Real-world evaluation
 
-The fine-tuned classifiers are also validated against live webcam video, not just the static UTKFace test set, to check whether test-set accuracy holds up under real capture conditions. See `docs/model_evaluation.md` for results — notably, gender classification generalizes well, while age classification degrades severely on live camera input regardless of condition, and face detection itself fails on faces angled past ~45°.
+The fine-tuned classifiers are also validated against live webcam video, not just the static test sets, to check whether test-set accuracy holds up under real capture conditions. See `docs/model_evaluation.md` for full results.
+
+**Age/gender** — conditions are lighting/occlusion/angle. Gender classification generalizes well; age classification degrades severely on live camera input regardless of condition; face detection itself fails on faces angled past ~45°.
 
 ```
 PYTHONPATH=.:scripts ./venv/bin/python3 scripts/evaluate_real_world.py --condition <name> --true-age <bin> --true-gender <Male|Female>
@@ -90,7 +116,17 @@ PYTHONPATH=.:scripts ./venv/bin/python3 scripts/summarize_real_world_eval.py
 
 - `scripts/real_world_eval/` — live-capture package (`constants.py`, `classify.py`, `capture.py`), reusing the existing `FaceDetector`.
 - Each condition session opens a live preview (green box = correct, red = wrong) and appends per-frame predictions to `runs/real_world_eval/<condition>.csv`; press `q` to stop.
-- Summarization writes `models/age_gender/real_world_eval_report.json`: face-detection rate and per-task accuracy per condition, compared against the RV-005 test-set accuracy.
+- Summarization writes `models/age_gender/real_world_eval_report.json`: face-detection rate and per-task accuracy per condition, compared against the fine-tuned classifier's test-set accuracy.
+
+**Emotion** — expanded into a full emotion × condition matrix (7 emotions × 5 conditions). Fear and disgust are unreliable live at any distance (3-16% accuracy); happy/angry/neutral hold up well at close-to-medium range; non-frontal poses (side view, looking down) fail detection too often to even collect reliable per-emotion data. An early "severe close-range collapse" finding turned out to be a background object (a mannequin) being misdetected as a face, not a real model or lens issue — see the model_evaluation.md writeup for the full investigation.
+
+```
+PYTHONPATH=.:scripts ./venv/bin/python3 scripts/evaluate_emotion_real_world.py --condition <name> --true-emotion <label>
+PYTHONPATH=.:scripts ./venv/bin/python3 scripts/summarize_emotion_real_world_eval.py
+```
+
+- `scripts/emotion_real_world_eval/` — live-capture package, mirroring `real_world_eval/`'s structure.
+- Summarization writes `models/emotion/real_world_eval_report.json`, comparing each condition against the *specific* held-emotion's test-set recall (not the blended overall top1 — see the script's docstring for why that distinction matters here).
 
 ## Age regression (continuous age for live display)
 
@@ -106,5 +142,5 @@ PYTHONPATH=scripts ./venv/bin/python3 scripts/evaluate_age_regression.py   # ove
 
 - `scripts/age_regression_prep/` — builds CSV manifests instead of a folder-per-class layout (regression has no discrete classes); reuses `utkface_prep`'s filename parsing and stratified split.
 - `scripts/age_regression/` — training package (`dataset.py`, `model.py`, `train.py`, `evaluate.py`, `plotting.py`).
-- Weights saved to `models/age_gender/regression_age.pt`; evaluation writes `models/age_gender/regression_report.json` with overall MAE and MAE bucketed into the RV-005 4-bin ranges for a per-age-group breakdown (bucketing is for reporting only — the model itself is never trained against bins).
+- Weights saved to `models/age_gender/regression_age.pt`; evaluation writes `models/age_gender/regression_report.json` with overall MAE and MAE bucketed into the original 4-bin classifier ranges for a per-age-group breakdown (bucketing is for reporting only — the model itself is never trained against bins).
 - Runs alongside the 4-bin classifier in the live pipeline: classifier output for analytics, regression output for display.

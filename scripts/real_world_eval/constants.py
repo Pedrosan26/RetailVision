@@ -1,11 +1,11 @@
 """
 constants.py
 
-Shared paths for the RV-006 real-world evaluation: capturing live camera
-frames under different conditions (lighting, occlusion, angle), running
-the RV-005 fine-tuned age/gender classifiers on detected faces, and
-logging per-frame predictions against a user-supplied ground truth for
-later accuracy-degradation analysis.
+Shared paths for the age/gender classifiers' real-world evaluation:
+capturing live camera frames under different conditions (lighting,
+occlusion, angle), running the fine-tuned age/gender classifiers on
+detected faces, and logging per-frame predictions against a user-supplied
+ground truth for later accuracy-degradation analysis.
 """
 
 from pathlib import Path

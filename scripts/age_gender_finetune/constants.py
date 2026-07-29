@@ -1,13 +1,13 @@
 """
 constants.py
 
-Shared paths and hyperparameters for RV-005 fine-tuning. Retrains both
+Shared paths and hyperparameters for age/gender fine-tuning. Retrains both
 classifiers from the original yolov8n-cls checkpoint (rather than continuing
-from the RV-004 baseline weights) so augmentation and a lower learning rate
+from the baseline weights) so augmentation and a lower learning rate
 get a clean run instead of compounding the mild overfitting already present
 in baseline_age.pt past ~epoch 70. Augmentation values match the strategy
-decided in docs/datasets/utkface.md (RV-003) but not applied to the RV-004
-baseline, which needed to be a faithful "defaults" floor.
+decided in docs/datasets/utkface.md but not applied to the baseline, which
+needed to be a faithful "defaults" floor.
 """
 
 from pathlib import Path
@@ -50,7 +50,7 @@ AUGMENTATION = {
     "erasing": 0.2,
 }
 
-# RV-005 acceptance thresholds, evaluated on the held-out test split.
+# Minimum acceptable accuracy, evaluated on the held-out test split.
 MIN_ACCURACY = {
     "age": 0.75,
     "gender": 0.85,

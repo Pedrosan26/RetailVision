@@ -1,1 +1,1 @@
-"""Fine-tuning and validation of YOLOv8 age/gender classifiers for UTKFace (RV-005)."""
+"""Fine-tuning and validation of YOLOv8 age/gender classifiers for UTKFace."""

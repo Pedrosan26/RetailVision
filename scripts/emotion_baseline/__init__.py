@@ -1,0 +1,1 @@
+"""Baseline YOLOv8 classifier training and evaluation for FER-2013 emotion."""

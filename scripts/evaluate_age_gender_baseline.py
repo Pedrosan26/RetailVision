@@ -1,7 +1,7 @@
 """
 evaluate_age_gender_baseline.py
 
-CLI entry point for RV-004 evaluation: for each trained baseline (age,
+CLI entry point for baseline evaluation: for each trained baseline (age,
 gender), computes top1/top5 accuracy and per-class precision/recall/F1 on
 the held-out UTKFace test split, saves a loss/accuracy curve plot, and
 writes a combined baseline_report.json. Run this after
@@ -19,7 +19,7 @@ from ultralytics import YOLO
 
 
 def main() -> None:
-    """Evaluate both baselines and write the combined RV-004 metrics report."""
+    """Evaluate both baselines and write the combined metrics report."""
     device = resolve_device()
     report: dict = {}
 
