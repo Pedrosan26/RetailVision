@@ -19,17 +19,20 @@ The venv must be created with **Python 3.12** (via Homebrew's `python@3.12`), no
 ## Running the live pipeline
 
 ```
-./venv/bin/python3 -m src.retailvision.pipeline_demo   # live camera preview with face-detection boxes
-./venv/bin/python3 -m src.retailvision.camera_test      # camera-only sanity check, no detection
+PYTHONPATH=. ./venv/bin/python3 -m src.retailvision.pipeline_demo                      # live camera, full age/gender/emotion pipeline
+PYTHONPATH=. ./venv/bin/python3 -m src.retailvision.pipeline_demo --source path/to.mp4 # pre-recorded video file instead of live camera
+PYTHONPATH=. ./venv/bin/python3 -m src.retailvision.pipeline_demo --benchmark          # headless, prints average FPS on exit
+./venv/bin/python3 -m src.retailvision.camera_test                                     # camera-only sanity check, no detection
 ```
 
-Both open a live window; press `q` to quit. Currently reads only from the laptop's default camera (`cv2.VideoCapture(0)`); multi-camera support is planned but not yet implemented.
+The live/video modes open a preview window; press `q` to quit. Currently reads only from the laptop's default camera (`cv2.VideoCapture(0)`) or a local video file; multi-camera support is planned but not yet implemented. See `docs/inference_pipeline.md` for the pipeline's architecture, design decisions, and FPS results.
 
 ## Module layout
 
 - `src/retailvision/camera_test.py` — minimal camera-open/read sanity check.
 - `src/retailvision/detection.py` — `FaceDetector`, wraps OpenCV's bundled Haar cascade classifier. First stage of the pipeline.
-- `src/retailvision/pipeline_demo.py` — wires capture → `FaceDetector` → live preview with drawn bounding boxes. Entry point later stages (demographics, emotion, tracking, zone scoring) get added onto.
+- `src/retailvision/inference.py` — `InferencePipeline`, combines `FaceDetector` with the fine-tuned age/gender and emotion classifiers into one per-frame call. See `docs/inference_pipeline.md`.
+- `src/retailvision/pipeline_demo.py` — wires capture (camera or video file) → `InferencePipeline` → live preview with drawn bounding boxes and predictions, or a headless FPS benchmark.
 
 ## Dataset preparation
 
