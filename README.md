@@ -33,14 +33,15 @@ Both open a live window; press `q` to quit. Currently reads only from the laptop
 
 ## Dataset preparation
 
-Datasets live under gitignored `data/<dataset>/raw/` (original downloads) and `data/<dataset>/processed/` (YOLOv8-classification-ready folder trees + a `distribution_report.json`). Human-readable documentation of sourcing, format decisions, and class distributions is tracked in `docs/datasets/`.
+Datasets live under gitignored `data/<dataset>/raw/` (original downloads) and `data/<dataset>/processed/` (prepared, training-ready layout + a `distribution_report.json`). Human-readable documentation of sourcing, format decisions, and class distributions is tracked in `docs/datasets/`.
 
 ```
-PYTHONPATH=scripts ./venv/bin/python3 scripts/prepare_utkface.py   # age/gender labels, see docs/datasets/utkface.md
-PYTHONPATH=scripts ./venv/bin/python3 scripts/prepare_fer2013.py   # 7 emotion classes, see docs/datasets/fer2013.md
+PYTHONPATH=scripts ./venv/bin/python3 scripts/prepare_utkface.py    # age/gender labels, see docs/datasets/utkface.md
+PYTHONPATH=scripts ./venv/bin/python3 scripts/prepare_fer2013.py    # 7 emotion classes, see docs/datasets/fer2013.md
+PYTHONPATH=scripts ./venv/bin/python3 scripts/prepare_widerface.py  # face bounding boxes, see docs/datasets/widerface.md
 ```
 
-Both datasets consist of pre-cropped single-face images, so they're prepared as YOLOv8 **classification** datasets (folder-per-class), face localization is a separate upstream pipeline stage.
+UTKFace and FER-2013 consist of pre-cropped single-face images, so they're prepared as YOLOv8 **classification** datasets (folder-per-class); face localization is a separate upstream pipeline stage. WIDER FACE is the exception — it's full scenes with bounding-box annotations, prepared as a YOLOv8 **detection** dataset (`images/` + matching `labels/`) instead, for training a face detector to eventually replace the Haar cascade `FaceDetector`.
 
 - **UTKFace** (`scripts/utkface_prep/`) — 33,481 images, age binned into `0-17`/`18-30`/`31-50`/`51+`, gender mapped to `Male`/`Female`, stratified 70/15/15 split. Known imbalance: White overrepresented ~5.5x across race labels (documented, not corrected).
 - **FER-2013** (`scripts/fer2013_prep/`) — 35,887 images across 7 emotion classes. Official test split kept untouched; a stratified 10% validation split is carved out of train. Known imbalance: Disgust is severely underrepresented (1.5% of data); Fear is normal-sized but documented as noisy/confusable with Sad and Surprise.
