@@ -113,24 +113,35 @@ world evaluation) validates directly against retail-style live-camera
 footage rather than trusting WIDER FACE metrics alone before the
 production swap in RV-029.
 
-## Augmentation strategy (decided, applied at training time via YOLOv8 hyperparameters)
+## Augmentation strategy
 
-Recommended settings for the `yolov8n` detection training run:
+The baseline (RV-026) deliberately used pure Ultralytics defaults, no
+augmentation tuning — it needed to be a faithful "defaults" floor to
+fine-tune against, same rationale as every classification baseline in
+this project. Tuning happened at fine-tuning time (RV-027,
+`scripts/widerface_finetune/constants.py`) instead:
 
 - **Horizontal flip (`fliplr=0.5`)**: safe — faces are roughly bilaterally
   symmetric.
 - **No vertical flip (`flipud=0.0`)**: retail camera faces are never
   upside-down.
-- **Mosaic (`mosaic=1.0`, Ultralytics' detection-mode default)**: unlike
-  the classification datasets (where mosaic doesn't apply to a single
-  pre-cropped face), mosaic is directly applicable and generally
-  beneficial in detection mode — it's kept on rather than disabled.
-- **Mild HSV jitter (`hsv_h≈0.015`, `hsv_s≈0.4`, `hsv_v≈0.3`)**: robustness
-  to in-store lighting variation, Ultralytics' detection-mode defaults are
-  a reasonable starting point here (unlike the classification models,
-  there's no race-imbalance-driven reason to keep color jitter especially
-  conservative for this task).
-- **Scale jitter (`scale≈0.5`)**: WIDER FACE's face-size distribution is
-  dominated by small faces (median 15px); scale jitter helps the model
-  generalize to the larger, closer faces expected in retail footage, which
-  are comparatively underrepresented in this training data.
+- **Mild rotation (`degrees=10.0`, up from the baseline's 0.0)**: robustness
+  to camera angle / head tilt, same rationale as UTKFace's augmentation.
+- **Scale jitter (`scale=0.9`, up from the detection default 0.5)**: WIDER
+  FACE's face-size distribution is dominated by small faces (median
+  15px); a wider random-zoom range exposes the model to more "zoomed in,
+  large face" training crops than the raw data provides on its own.
+- **Mosaic (`mosaic=0.5`, down from the detection default 1.0)**: revised
+  from RV-025's original plan to keep mosaic at its default. Mosaic
+  stitches 4 images into one training frame, so each sub-image only
+  occupies roughly 1/4 of the frame — every face ends up looking
+  smaller/more crowd-like than it actually is, compounding WIDER FACE's
+  existing small-face bias in exactly the wrong direction for this use
+  case. Lowering (not eliminating — mosaic still has real generalization
+  value) the probability lets more batches train on full-frame,
+  single-scene images that better resemble retail camera framing.
+- **Mild HSV jitter (`hsv_h=0.015`, `hsv_s=0.4`, `hsv_v=0.3`)**: robustness
+  to in-store lighting variation, close to Ultralytics' detection-mode
+  defaults — unlike the classification models, there's no
+  race-imbalance-driven reason to keep color jitter especially
+  conservative for this task.
