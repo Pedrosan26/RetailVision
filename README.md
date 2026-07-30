@@ -97,6 +97,20 @@ PYTHONPATH=scripts ./venv/bin/python3 scripts/evaluate_emotion_finetune.py  # pe
 - Final weights are saved to `models/emotion/final.pt`.
 - Neutral failed its 80% recall threshold across two fine-tuning iterations (67.6%, 67.3%) with confusion-matrix evidence of a structural neutral/sad overlap at FER-2013's 48×48 resolution. DeepFace's pre-trained emotion model was evaluated as an alternative (`scripts/evaluate_emotion_deepface.py`) but performed worse on every class (56.4% vs. our 69.7% overall) and was rejected. Our fine-tuned classifier remains production; Neutral (alongside Fear/Disgust) is accepted as a documented limitation. Full investigation: `docs/models/emotion_finetune.md`.
 
+### Face detector
+
+A `yolov8n` **detection**-mode model trained from scratch on WIDER FACE — the project's first detection-mode YOLOv8 run (age/gender/emotion are all classification-mode `yolov8n-cls`), intended to eventually replace the Haar cascade `FaceDetector`.
+
+```
+PYTHONPATH=scripts ./venv/bin/python3 scripts/train_widerface_baseline.py     # trains the face-detection baseline
+PYTHONPATH=scripts ./venv/bin/python3 scripts/evaluate_widerface_baseline.py  # mAP/precision/recall + official Easy/Medium/Hard recall, report
+```
+
+- `scripts/widerface_baseline/` — training/evaluation package; evaluation includes both Ultralytics' own detection metrics and WIDER FACE's real, author-defined Easy/Medium/Hard difficulty partition (downloaded separately from the dataset's `eval_tools` package — the partition can't be reconstructed from the raw box annotations alone).
+- Trained weights are saved to `models/face_detection/baseline.pt`.
+- Evaluation writes `models/face_detection/baseline_report.json` and a loss/mAP curve PNG. See `docs/models/widerface_baseline.md` for full results (76.23% mAP@0.5 on the held-out test split; recall degrades monotonically from 94.18% on Easy faces to 71.10% on Hard, the expected WIDER FACE pattern).
+- Not yet integrated into the live pipeline — fine-tuning (augmentation tuned for retail camera conditions) and real-world evaluation come next, before any production swap.
+
 ## Live demo
 
 To just watch the current classifiers and the age-regression model run on your own webcam, with no ground truth or logging needed:
