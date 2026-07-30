@@ -60,39 +60,74 @@ test set has no public ground truth, see `docs/datasets/widerface.md`):
 
 ## Results
 
-*TBD — fill in after `scripts/train_widerface_baseline.py` and
-`scripts/evaluate_widerface_baseline.py` complete.*
+Trained on an RTX 3070 (CUDA) — 100 epochs in 2.636 hours. (An earlier
+attempt on Apple Silicon MPS extrapolated to 40+ hours before a
+memory-pressure crash forced moving to CUDA; see `train.py`'s docstring
+for the `cache`/`batch` adjustments that came out of that.)
 
 | Metric | Value |
 |---|---|
-| mAP@0.5 (test split) | — |
-| mAP@0.5:0.95 (test split) | — |
-| Precision (test split) | — |
-| Recall (test split) | — |
+| mAP@0.5 (test split) | 76.23% |
+| mAP@0.5:0.95 (test split) | 41.75% |
+| Precision (test split) | 86.35% |
+| Recall (test split) | 67.54% |
 
 | Difficulty | Recall | GT faces evaluated | Images evaluated |
 |---|---|---|---|
-| Easy | — | — | — |
-| Medium | — | — | — |
-| Hard | — | — | — |
+| Easy | 94.18% | 3,538 | 1,308 |
+| Medium | 89.87% | 6,527 | 1,517 |
+| Hard | 71.10% | 15,766 | 1,609 |
 
 ## Findings
 
-*TBD — expected shape, to confirm once real numbers land: Hard should be
-meaningfully lower than Easy (this is the standard, well-documented WIDER
-FACE pattern — Hard includes far more small/blurred/occluded faces, see
-`docs/datasets/widerface.md`'s box-size percentiles). If Hard and Easy
-come out close together, or Hard is *higher* than Easy, that's a red flag
-worth investigating rather than reporting as-is — same lesson as the
-emotion model's close-range/happy anomaly (`docs/model_evaluation.md`):
-an unexpected number is a prompt to check the methodology before trusting
-the result.*
+**Hard is meaningfully lower than Easy (71.10% vs. 94.18%) — the expected
+shape, not a red flag.** This confirmed prediction (see `docs/datasets/widerface.md`'s
+box-size percentiles: median annotated face is only 15px) is exactly why
+the real official partition was worth downloading rather than trusting
+an approximation: a face-count-bucket substitute couldn't have produced
+this specific, checkable expectation ahead of time. Recall degrades
+monotonically Easy → Medium → Hard, consistent with each tier including
+progressively smaller/more occluded faces.
+
+**Image coverage differs by difficulty tier** (Easy: 1,308/1,613 images,
+Medium: 1,517, Hard: 1,609) because not every image contains a
+difficulty-qualifying face — Hard's looser inclusion criteria means
+almost every image (99.8%) contributes at least one Hard-tier face,
+while only 81% contain an Easy-tier one. This isn't a data-quality gap,
+it's the partition working as designed.
+
+**mAP@0.5:0.95 (41.75%) is well below mAP@0.5 (76.23%) — expected, not
+concerning.** mAP@0.5:0.95 averages precision across IoU thresholds from
+0.5 to 0.95 in steps of 0.05, so it penalizes boxes that are
+approximately-but-not-precisely located much more harshly. A large gap
+between the two is normal for detection models generally, not specific
+to this run.
+
+**Test-split numbers are slightly below the val-split numbers logged
+during training** (test mAP@0.5 76.23% vs. training's own final val-split
+validation at 79.9%; similarly precision 86.35% vs. 88.6%, recall 67.54%
+vs. 72.1%). This is exactly the expected direction: val gets used for
+monitoring during training even though not for gradient updates, while
+test stays genuinely untouched until this evaluation — same held-out
+discipline as every other model in this project (e.g. FER-2013's
+official test split, kept intact through the emotion model's entire
+training history).
 
 ## Training health
 
-*TBD — loss/mAP curves, once training completes.*
-
 ![WIDER FACE baseline loss & mAP curves](../../models/face_detection/baseline_loss_curves.png)
+
+No overfitting signature — unlike the age/gender and emotion
+classification baselines, which both showed val loss reversing upward
+after roughly epoch 40 while train loss kept falling. Here, `val/box_loss`,
+`val/cls_loss`, and `val/dfl_loss` track their `train/*` counterparts
+closely throughout, with `cls_loss` in particular converging to nearly
+the same value (~0.6) on both train and val by epoch 100. `precision(B)`,
+`recall(B)`, `mAP50(B)`, and `mAP50-95(B)` all rise smoothly and plateau
+around epoch 60-80, holding flat rather than regressing through the
+remaining epochs. Fine-tuning (RV-027) can lean on this: there's no
+early-stopping pressure this baseline is already fighting against, unlike
+the classification baselines' documented `patience` recommendation.
 
 ## Artifacts
 

@@ -69,7 +69,9 @@ def _test_split_relpaths() -> set[str]:
     relpaths = set()
     for image_link in test_images_dir.iterdir():
         target = image_link.resolve()
-        relpaths.add(str(target.relative_to(RAW_VAL_IMAGES_DIR)))
+        # .as_posix() (always "/"), not str() -- str() renders "\" on Windows,
+        # which would never match _load_keep_boxes' "event/filename.jpg" keys.
+        relpaths.add(target.relative_to(RAW_VAL_IMAGES_DIR).as_posix())
     return relpaths
 
 
