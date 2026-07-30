@@ -5,6 +5,11 @@ ultralytics
 Pillow
 scikit-learn
 pandas
+# scipy: only for scipy.io.loadmat (scripts/widerface_baseline/official_eval.py
+# reads WIDER FACE's official eval_tools ground-truth .mat files). Already
+# pulled in transitively by scikit-learn, but listed explicitly since our own
+# code imports it directly.
+scipy
 # deepface + tf-keras: RET-9's DeepFace fallback comparison
 # (scripts/evaluate_emotion_deepface.py) only, not used in the production
 # pipeline — pulls in TensorFlow as a backend. tf-keras must be listed
