@@ -3,8 +3,9 @@ pipeline_demo.py
 
 End-to-end demo of the RetailVision pipeline: opens a camera or a
 pre-recorded video file, runs each frame through InferencePipeline (face
-detection plus age/gender/emotion classification), and shows a live
-preview with each detected person's bounding box and predictions drawn.
+detection plus age/gender/emotion classification), shows a live preview
+with each detected person's bounding box and predictions drawn, and
+appends an anonymized log record for each detection (see output_log.py).
 Supports a headless --benchmark mode (no display) to measure sustained
 FPS, since imshow overhead would otherwise skew the number -- benchmark
 mode has no window to capture a 'q' keypress, so it stops automatically
@@ -21,6 +22,7 @@ import time
 import cv2
 
 from .inference import InferencePipeline
+from .output_log import log_detection
 
 
 def parse_args() -> argparse.Namespace:
@@ -95,6 +97,8 @@ def main() -> None:
 
             detections = pipeline.process_frame(frame)
             total_faces += len(detections)
+            for det in detections:
+                log_detection(det)
 
             if args.benchmark:
                 now = time.perf_counter()

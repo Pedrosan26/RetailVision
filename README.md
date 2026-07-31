@@ -27,12 +27,17 @@ PYTHONPATH=. ./venv/bin/python3 -m src.retailvision.pipeline_demo --benchmark   
 
 The live/video modes open a preview window; press `q` to quit. Currently reads only from the laptop's default camera (`cv2.VideoCapture(0)`) or a local video file; multi-camera support is planned but not yet implemented. See `docs/inference_pipeline.md` for the pipeline's architecture, design decisions, and FPS results.
 
+```
+PYTHONPATH=. ./venv/bin/python3 -m unittest discover -s tests -v  # run the test suite
+```
+
 ## Module layout
 
 - `src/retailvision/camera_test.py` — minimal camera-open/read sanity check.
 - `src/retailvision/detection.py` — `FaceDetector`, runs a YOLOv8 detection-mode model trained from scratch on WIDER FACE and fine-tuned for retail camera conditions. First stage of the pipeline.
 - `src/retailvision/inference.py` — `InferencePipeline`, combines `FaceDetector` with the fine-tuned age/gender and emotion classifiers into one per-frame call. See `docs/inference_pipeline.md`.
-- `src/retailvision/pipeline_demo.py` — wires capture (camera or video file) → `InferencePipeline` → live preview with drawn bounding boxes and predictions, or a headless FPS benchmark.
+- `src/retailvision/output_log.py` — privacy layer: converts each detection into an anonymized record (demographic/emotion labels only, never pixel data) and appends it as newline-delimited JSON to `data/inference_log.json`. Schema documented in `docs/schema.md`.
+- `src/retailvision/pipeline_demo.py` — wires capture (camera or video file) → `InferencePipeline` → live preview with drawn bounding boxes and predictions, or a headless FPS benchmark. Also logs every detection via `output_log.py`.
 
 ## Dataset preparation
 
