@@ -109,7 +109,18 @@ PYTHONPATH=scripts ./venv/bin/python3 scripts/evaluate_widerface_baseline.py  # 
 - `scripts/widerface_baseline/` — training/evaluation package; evaluation includes both Ultralytics' own detection metrics and WIDER FACE's real, author-defined Easy/Medium/Hard difficulty partition (downloaded separately from the dataset's `eval_tools` package — the partition can't be reconstructed from the raw box annotations alone).
 - Trained weights are saved to `models/face_detection/baseline.pt`.
 - Evaluation writes `models/face_detection/baseline_report.json` and a loss/mAP curve PNG. See `docs/models/widerface_baseline.md` for full results (76.23% mAP@0.5 on the held-out test split; recall degrades monotonically from 94.18% on Easy faces to 71.10% on Hard, the expected WIDER FACE pattern).
-- Not yet integrated into the live pipeline — fine-tuning (augmentation tuned for retail camera conditions) and real-world evaluation come next, before any production swap.
+
+Fine-tuning retrains from `yolov8n.pt` with augmentation tuned for the retail-camera domain gap documented in `docs/datasets/widerface.md` (wider zoom range, reduced mosaic — mosaic shrinks every face to ~1/4 frame, compounding WIDER FACE's small-face bias in the wrong direction for this use case):
+
+```
+PYTHONPATH=scripts ./venv/bin/python3 scripts/finetune_widerface.py           # fine-tunes with retail-tuned augmentation
+PYTHONPATH=scripts ./venv/bin/python3 scripts/evaluate_widerface_finetune.py  # metrics vs. baseline, threshold check, report
+```
+
+- `scripts/widerface_finetune/` — fine-tune training package; reuses `widerface_baseline`'s evaluation/plotting helpers, which are generic across any trained checkpoint.
+- Final weights are saved to `models/face_detection/final.pt`.
+- Evaluation checks Hard-difficulty recall against a minimum threshold (71.10% — the baseline's own result). The fine-tune **regressed on every WIDER FACE metric** (mAP@0.5 74.63% vs. baseline's 76.23%; Hard recall 68.79%, failing the threshold) — working hypothesis is that this is an expected cost of deliberately shifting training data toward retail-camera framing and away from WIDER FACE's own crowd-scene domain, not a training failure, but that's unconfirmed until RV-028 tests both checkpoints against real footage. See `docs/models/widerface_finetune.md` for the full analysis.
+- Not yet integrated into the live pipeline — real-world evaluation (RV-028) is the actual gate for the production swap (RV-029), evaluating both `baseline.pt` and `final.pt` rather than assuming which is better from WIDER FACE metrics alone.
 
 ## Live demo
 

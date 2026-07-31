@@ -1,0 +1,31 @@
+{
+  "weights": "C:\\Users\\Pedro Sanchez\\Documents\\Github\\RetailVision\\models\\face_detection\\final.pt",
+  "overall_test_split_metrics": {
+    "mAP50": 0.7463,
+    "mAP50_95": 0.4042,
+    "precision": 0.8487,
+    "recall": 0.6643
+  },
+  "baseline_mAP50": 0.7623,
+  "mAP50_delta_vs_baseline": -0.016000000000000014,
+  "official_difficulty_recall": {
+    "easy": {
+      "images_evaluated": 1308,
+      "gt_faces": 3538,
+      "recall": 0.937
+    },
+    "medium": {
+      "images_evaluated": 1517,
+      "gt_faces": 6527,
+      "recall": 0.8914
+    },
+    "hard": {
+      "images_evaluated": 1609,
+      "gt_faces": 15766,
+      "recall": 0.6879
+    }
+  },
+  "min_hard_recall_threshold": 0.711,
+  "hard_recall_threshold_passed": false,
+  "loss_curve_plot": "C:\\Users\\Pedro Sanchez\\Documents\\Github\\RetailVision\\models\\face_detection\\final_loss_curves.png"
+}
