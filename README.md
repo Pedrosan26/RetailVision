@@ -119,8 +119,8 @@ PYTHONPATH=scripts ./venv/bin/python3 scripts/evaluate_widerface_finetune.py  # 
 
 - `scripts/widerface_finetune/` — fine-tune training package; reuses `widerface_baseline`'s evaluation/plotting helpers, which are generic across any trained checkpoint.
 - Final weights are saved to `models/face_detection/final.pt`.
-- Evaluation checks Hard-difficulty recall against a minimum threshold (71.10% — the baseline's own result; not compared to Haar cascade's real-world condition rates, which only becomes a meaningful comparison in RV-028's live-camera evaluation). See `docs/models/widerface_finetune.md` for full results.
-- Not yet integrated into the live pipeline — real-world evaluation (RV-028) is the actual gate for the production swap (RV-029), not this dataset's own metrics.
+- Evaluation checks Hard-difficulty recall against a minimum threshold (71.10% — the baseline's own result). The fine-tune **regressed on every WIDER FACE metric** (mAP@0.5 74.63% vs. baseline's 76.23%; Hard recall 68.79%, failing the threshold) — working hypothesis is that this is an expected cost of deliberately shifting training data toward retail-camera framing and away from WIDER FACE's own crowd-scene domain, not a training failure, but that's unconfirmed until RV-028 tests both checkpoints against real footage. See `docs/models/widerface_finetune.md` for the full analysis.
+- Not yet integrated into the live pipeline — real-world evaluation (RV-028) is the actual gate for the production swap (RV-029), evaluating both `baseline.pt` and `final.pt` rather than assuming which is better from WIDER FACE metrics alone.
 
 ## Live demo
 
