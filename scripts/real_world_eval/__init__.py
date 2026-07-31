@@ -1,1 +1,1 @@
-"""Live-camera evaluation of the fine-tuned age/gender classifiers under non-ideal conditions (RV-006)."""
+"""Live-camera evaluation of the fine-tuned age/gender classifiers under non-ideal conditions."""

@@ -1,8 +1,7 @@
 """
 classify.py
 
-Runs the RV-005 fine-tuned age/gender classifiers on a single detected
-face crop.
+Runs the fine-tuned age/gender classifiers on a single detected face crop.
 """
 
 import numpy as np

@@ -1,4 +1,4 @@
-# UTKFace dataset — age/gender preparation (RV-002)
+# UTKFace dataset — age/gender preparation
 
 ## Source
 
@@ -36,20 +36,20 @@ data/utkface/processed/
   distribution_report.json
 ```
 
-### Why these bins (revised after RV-008)
+### Why these bins (revised after the rebinning investigation)
 
 The age bins are asymmetric by design, not evenly spaced. An earlier attempt
-(RV-008, see `docs/models/age_rebinning_investigation.md`) tried uniform 7-
+(see `docs/models/age_rebinning_investigation.md`) tried uniform 7-
 and 10-class schemes and found that childhood/adolescent and elderly
 brackets classify reliably (F1 0.82-0.98), while adult brackets in the
 18-70 range plateau at 50-65% F1 regardless of tuning — narrower cuts there
 ask the classifier to draw boundaries the visual signal doesn't support.
-This scheme keeps every bin that RV-008 proved reliable exactly as fine as
-it was (`0-5`, `6-12`, `13-17`, `65+`), and merges the entire range that was
-stuck (`18-25`, `26-32`, `33-40` were all weak or completely unmoving under
-fine-tuning) into a single `18-40` bucket, plus one `41-64` bucket for the
-remaining moderate-difficulty adult range. A separate continuous
-age-regression model (RET-31) covers the finer-grained estimate this
+This scheme keeps every bin that investigation proved reliable exactly as
+fine as it was (`0-5`, `6-12`, `13-17`, `65+`), and merges the entire range
+that was stuck (`18-25`, `26-32`, `33-40` were all weak or completely
+unmoving under fine-tuning) into a single `18-40` bucket, plus one `41-64`
+bucket for the remaining moderate-difficulty adult range. A separate
+continuous age-regression model covers the finer-grained estimate this
 classifier deliberately no longer attempts.
 
 Two independent classification trees (age, gender) are generated from the
@@ -76,8 +76,8 @@ with a fixed seed (42) so re-running the script reproduces the same split.
 range the classifier could never reliably subdivide, and having the most
 data for it should make that broad distinction ("not a child, not older")
 easy. `13-17` is the smallest at 4.5%; worth watching in per-class eval
-metrics, though it was one of the strongest-performing classes in RV-008
-even at that size.
+metrics, though it was one of the strongest-performing classes in the
+rebinning investigation even at that size.
 
 | Gender | Count | Share |
 |---|---|---|
@@ -94,7 +94,7 @@ Effectively balanced — no correction needed.
 | Black | 4,930 | 14.7% |
 | Others | 2,795 | 8.3% |
 
-This is the imbalance the ticket flagged as the real risk. White faces are
+This is the imbalance that matters most for fairness auditing. White faces are
 ~5.5x overrepresented relative to "Others." Race is not a model output, but
 because it isn't balanced, age/gender accuracy should be **evaluated
 per-race on the test set**, not just in aggregate — an aggregate accuracy
@@ -103,7 +103,7 @@ This is a known, documented UTKFace characteristic, not a preprocessing bug.
 
 ## Augmentation strategy (decided, applied at training time via YOLOv8 hyperparameters)
 
-Recommended settings for the `yolov8n-cls` training run (RV-003):
+Recommended settings for the `yolov8n-cls` training run:
 
 - **Horizontal flip (`fliplr=0.5`)**: safe — faces are roughly bilaterally
   symmetric and flipping doesn't change age or gender.

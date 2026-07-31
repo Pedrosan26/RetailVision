@@ -1,12 +1,12 @@
 """
 finetune_age_gender.py
 
-CLI entry point for RV-005: fine-tunes two yolov8n-cls classifiers on
+CLI entry point that fine-tunes two yolov8n-cls classifiers on
 UTKFace (age-group, gender) from the original yolov8n-cls checkpoint, with
 augmentation and adjusted learning rate/batch size/epoch count/patience
 (see age_gender_finetune/constants.py), and copies the best checkpoint of
 each into models/age_gender/. Run scripts/evaluate_age_gender_finetune.py
-afterwards to validate against RV-005's accuracy thresholds.
+afterwards to validate against the required accuracy thresholds.
 
 Usage: PYTHONPATH=scripts ./venv/bin/python3 scripts/finetune_age_gender.py
 """

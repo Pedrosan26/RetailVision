@@ -1,4 +1,4 @@
-# Age regression model (RET-31)
+# Age regression model
 
 ## Setup
 
@@ -25,8 +25,8 @@ jitter — no vertical flip, no aggressive HSV shift.
 
 ## Why regression, not another classifier bin scheme
 
-Directly motivated by the RV-008 rebinning investigation's finding (see
-`README.md` in this folder → "RV-008"): narrower age *classification*
+Directly motivated by the age rebinning investigation's finding (see
+`README.md` in this folder → the rebinning section): narrower age *classification*
 bins hit a hard ceiling on adult faces (F1 0.50-0.65, unresponsive to
 tuning) because the classes genuinely overlap in visual feature space.
 Regression sidesteps the bin-boundary problem entirely — there's nothing
@@ -55,7 +55,7 @@ same numbers by construction.
 |---|---|
 | Overall MAE | **3.65 years** |
 
-| Age bucket (RV-005 4-bin edges, for cross-run comparability) | MAE | Support |
+| Age bucket (original 4-bin classifier edges, for cross-run comparability) | MAE | Support |
 |---|---|---|
 | 0-17 | 1.33 | 1,225 |
 | 18-30 | 2.94 | 1,544 |
@@ -76,7 +76,7 @@ center. An overall MAE of 3.65 years is in line with published
 age-estimation benchmarks (commonly 3-6 years MAE) for a comparable
 model/data scale.
 
-Note: bucketed here using the RV-005 4-bin edges purely for report
+Note: bucketed here using the original 4-bin classifier edges purely for report
 comparability (`REPORT_AGE_BUCKETS` in `scripts/age_regression/constants.py`)
 — this is a reporting-only grouping. The model itself never saw any bins
 during training, and this grouping is unrelated to the classifier's
@@ -88,7 +88,7 @@ Wired into `scripts/live_demo.py` alongside the classifiers — every
 detected face shows both the classifier's bin and the regression model's
 continuous estimate together, e.g. `18-40 (~26y, 0.91) / Male (0.97)`,
 matching the intended production split: classifier output for analytics,
-regression output for display. **Not yet run through the RV-006-style
+regression output for display. **Not yet run through the same style of
 ground-truth-logged real-world evaluation** — `evaluate_real_world.py`
 only logs classifier predictions today, not the regression estimate, so
 there is no live-accuracy number for this model yet, only test-set MAE

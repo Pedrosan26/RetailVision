@@ -9,7 +9,7 @@ coarse buckets, `yolov8n-cls`) and a continuous **regression** model
 Both are trained on UTKFace but are otherwise independent models.
 
 Read top to bottom for the full story in order, or jump to a section.
-Each links out to its full per-ticket doc where one exists.
+Each links out to its full doc where one exists.
 
 ## Current state at a glance
 
@@ -22,19 +22,20 @@ Each links out to its full per-ticket doc where one exists.
 
 ## Timeline & decisions
 
-### 1. RV-002 — Dataset preparation
+### 1. Dataset preparation
 
 33,481 UTKFace images (`UTKFace/` + `crop_part1/`, 7 malformed filenames
 skipped), laid out as a `yolov8n-cls`-compatible folder tree
 (`data/utkface/processed/{age,gender}/{train,val,test}/<class>/`), 70/15/15
 stratified split, seed 42. Original age binning was uniform 4-bin
-(`0-17`/`18-30`/`31-50`/`51+`) — later superseded (see RET-31 below).
-Gender is ~50/50 balanced; race is documented but unbalanced (White
-~5.5x overrepresented) and tracked for fairness auditing, not corrected.
+(`0-17`/`18-30`/`31-50`/`51+`) — later superseded (see the hybrid 6-bin
+section below). Gender is ~50/50 balanced; race is documented but
+unbalanced (White ~5.5x overrepresented) and tracked for fairness
+auditing, not corrected.
 
 → Full doc: [`docs/datasets/utkface.md`](../datasets/utkface.md)
 
-### 2. RV-004 — Baseline classifiers
+### 2. Baseline classifiers
 
 Two independent `yolov8n-cls` models trained from scratch, Ultralytics
 defaults (100 epochs, `imgsz=224`).
@@ -46,7 +47,7 @@ defaults (100 epochs, `imgsz=224`).
 
 → Full doc: [`docs/models/age_gender_baseline.md`](age_gender_baseline.md)
 
-### 3. RV-005 — Fine-tuned classifiers
+### 3. Fine-tuned classifiers
 
 Retrained from `yolov8n-cls.pt` (not continued from baseline weights, to
 avoid compounding overfitting) with augmentation + tuned hyperparameters
@@ -57,31 +58,31 @@ avoid compounding overfitting) with augmentation + tuned hyperparameters
 | Gender | 85% | 96.40% | PASS — genuine improvement, no overfitting |
 | Age (4-bin) | 75% | 84.87% | PASS — but essentially flat vs. baseline; middle-bracket confusion unresolved, overfitting shifted *earlier* (epoch ~22) |
 
-Decision: accepted as-is (ticket's bar is clearing 75%, not beating the
-baseline). Documented that any further age work should target the
+Decision: accepted as-is (the required bar is clearing 75%, not beating
+the baseline). Documented that any further age work should target the
 `18-30`/`31-50` boundary specifically rather than more hyperparameter
-tuning — this is exactly what RV-008 (next) attempted.
+tuning — this is exactly what the rebinning investigation (next) attempted.
 
 → Full doc: [`docs/models/age_gender_finetune.md`](age_gender_finetune.md)
 
-**Note on the graphics for RV-004/RV-005**: `scripts/train_age_gender_baseline.py`
+**Note on the graphics for the original baseline/fine-tune**: `scripts/train_age_gender_baseline.py`
 and `finetune_age_gender.py` always write to the same fixed output paths
 (`models/age_gender/baseline_age.pt`, `final_age.pt`, and their loss-curve
-PNGs) regardless of which age-bin scheme is active. The later RET-31 6-bin
-retrain silently overwrote RV-004/RV-005's original 4-bin weights, JSON
-reports, and PNG curves with 6-bin ones — confirmed by inspecting the
-current `baseline_report.json`/`final_report.json` on disk, which hold
-6-bin class labels, not the 4-bin numbers quoted above. The 4-bin numbers
+PNGs) regardless of which age-bin scheme is active. The later 6-bin
+retrain silently overwrote the original 4-bin weights, JSON reports, and
+PNG curves with 6-bin ones — confirmed by inspecting the current
+`baseline_report.json`/`final_report.json` on disk, which hold 6-bin
+class labels, not the 4-bin numbers quoted above. The 4-bin numbers
 above are correct and sourced from the two docs linked, written at the
 time those runs completed; the *graphics* for those specific runs no
 longer exist on disk. The current PNGs at those paths are the 6-bin
 scheme's curves — see section 6 below, where they're the correct artifact.
 
-### 4. RV-006 — Real-world evaluation
+### 4. Real-world evaluation
 
-The RV-005 classifiers tested against live laptop-webcam video (not just
-the static test set) across 4 conditions: `normal_light`, `low_light`,
-`turned_away`, `angled_45`.
+The fine-tuned classifiers tested against live laptop-webcam video (not
+just the static test set) across 4 conditions: `normal_light`,
+`low_light`, `turned_away`, `angled_45`.
 
 | Condition | Face detection rate | Age accuracy | Gender accuracy |
 |---|---|---|---|
@@ -107,7 +108,7 @@ rate) — a known, expected Haar-cascade limitation, not a classifier issue.
 
 → Full doc: [`docs/model_evaluation.md`](../model_evaluation.md)
 
-### 5. RV-008 — Age rebinning investigation (abandoned, not merged)
+### 5. Age rebinning investigation (abandoned, not merged)
 
 Prompted by wanting finer-grained age *display* than 4 wide buckets.
 Tried uniform 7-class, then 10-class age binning, through the full
@@ -130,30 +131,32 @@ data/task ceiling on narrow adult age bins from a single photo, not a
 tuning problem.
 
 **Decision**: abandon narrower classification bins for the fine-grained
-display need; pursue a continuous regression model instead (→ RET-31).
-Keep the classifier for what it's actually good at — broad, reliable
-buckets — informing the hybrid scheme adopted next.
+display need; pursue a continuous regression model instead (see the
+hybrid 6-bin section below). Keep the classifier for what it's actually
+good at — broad, reliable buckets — informing the hybrid scheme adopted
+next.
 
-This investigation lives on the unmerged branch `refactor/ps/RV-008` (its
-data/weights were never merged into production); this section captures
-its findings for the permanent record since the branch itself won't
-persist alongside `main`.
+This investigation lives on a separate unmerged branch (its data/weights
+were never merged into production); this section captures its findings
+for the permanent record since the branch itself won't persist alongside
+`main`.
 
-### 6. RET-31 — Hybrid 6-bin scheme + regression model (current)
+### 6. Hybrid 6-bin scheme + regression model (current)
 
-Two changes shipped together under RET-31:
+Two changes shipped together:
 
-**a. Asymmetric 6-bin classifier scheme.** Keep every bin RV-008 proved
-reliable exactly as fine as it was (`0-5`, `6-12`, `13-17`, `65+`), merge
-the entire adult range that plateaued regardless of tuning into two wider
-buckets (`18-40`, `41-64`). Retrained baseline + fine-tune from scratch
-against this scheme (~11.6h combined, overnight run).
+**a. Asymmetric 6-bin classifier scheme.** Keep every bin the rebinning
+investigation proved reliable exactly as fine as it was (`0-5`, `6-12`,
+`13-17`, `65+`), merge the entire adult range that plateaued regardless of
+tuning into two wider buckets (`18-40`, `41-64`). Retrained baseline +
+fine-tune from scratch against this scheme (~11.6h combined, overnight
+run).
 
 | Scheme | Age accuracy | Gender accuracy | Age threshold |
 |---|---|---|---|
-| RV-005 — uniform 4-bin | 84.87% | 96.40% | PASS |
-| RV-008 — uniform 10-bin (abandoned) | 69.36% | 96.81% | FAIL |
-| **RET-31 — asymmetric 6-bin** | **88.77%** | **96.34%** | **PASS** |
+| Uniform 4-bin (original) | 84.87% | 96.40% | PASS |
+| Uniform 10-bin (abandoned) | 69.36% | 96.81% | FAIL |
+| **Asymmetric 6-bin (current)** | **88.77%** | **96.34%** | **PASS** |
 
 Beats the original 4-bin classifier outright, not just avoiding the
 10-bin collapse. Every class now lands at F1 ≥ 0.78 — no weak class
@@ -195,10 +198,10 @@ One informal ground-truth-logged session has been run so far
 | Age accuracy (6-bin) | 61.9% |
 | Gender accuracy | 100% |
 
-Encouraging relative to RV-006's 25.49% `normal_light` age accuracy on
+Encouraging relative to the earlier 25.49% `normal_light` age accuracy on
 the old 4-bin model — consistent with the 6-bin scheme's classes being
 easier to separate — but this is a **single uncontrolled session**, not
-the full 4-condition methodology RV-006 used, so treat it as directional
+the full 4-condition methodology used earlier, so treat it as directional
 only. See "Open items" below for what's still missing to make this a
 proper comparison.
 
@@ -206,25 +209,26 @@ proper comparison.
 
 - **Full real-world re-evaluation**: only `normal_light` has been
   re-tested against the 6-bin classifier; `low_light`, `turned_away`,
-  `angled_45` still reflect the old 4-bin model from RV-006.
+  `angled_45` still reflect the old 4-bin model from the earlier
+  evaluation.
 - **Mixed-scheme log file**: `runs/real_world_eval/normal_light.csv`
-  contains both the old RV-006 4-bin rows (1,755) and the new 6-bin rows
-  (369) in the same file, from reusing the `normal_light` condition name.
-  Not yet split or cleaned up.
+  contains both the old 4-bin rows (1,755) and the new 6-bin rows (369)
+  in the same file, from reusing the `normal_light` condition name. Not
+  yet split or cleaned up.
 - **Regression model has no live-accuracy number**: `evaluate_real_world.py`
   only logs classifier predictions today, not the regression estimate —
   test-set MAE (3.65y) is the only measured accuracy so far.
-- **Age classifier's live-camera domain-shift issue (RV-006, Finding 2)**
-  is not fixed, only diagnosed — the 6-bin retrain may or may not have
-  helped; unknown until the other 3 conditions are re-run.
+- **Age classifier's live-camera domain-shift issue** (see Finding 2
+  above) is not fixed, only diagnosed — the 6-bin retrain may or may not
+  have helped; unknown until the other 3 conditions are re-run.
 - **Not wired into the live pipeline** (`pipeline_demo.py`): all of the
   above are standalone scripts (`live_demo.py`, `evaluate_real_world.py`),
   not yet integrated into the actual capture → detect → classify loop the
   production pipeline will run.
-- **Per-race breakdown** (flagged since RV-004, `docs/datasets/utkface.md`):
-  still not done for any age or gender model — race is unbalanced in the
-  training data (White ~5.5x overrepresented) and aggregate accuracy can
-  hide group-level gaps.
+- **Per-race breakdown** (flagged since the original baseline,
+  `docs/datasets/utkface.md`): still not done for any age or gender model
+  — race is unbalanced in the training data (White ~5.5x overrepresented)
+  and aggregate accuracy can hide group-level gaps.
 
 ## Where everything lives
 
