@@ -4,9 +4,9 @@
 
 `src/retailvision/inference.py` combines face detection with age/gender
 and emotion classification into a single per-frame call. One shared
-`FaceDetector` (Haar cascade) locates faces; every detected crop is then
-run through all three fine-tuned YOLOv8 classifiers
-(`models/age_gender/final_age.pt`, `final_gender.pt`,
+`FaceDetector` (a fine-tuned YOLOv8 detection-mode model) locates faces;
+every detected crop is then run through all three fine-tuned YOLOv8
+classifiers (`models/age_gender/final_age.pt`, `final_gender.pt`,
 `models/emotion/final.pt`).
 
 ```python
@@ -43,16 +43,16 @@ different models run their own detection passes) doesn't apply to this
 architecture. If a future detector swap moves to per-model detection, a
 matching step would need to be added at that point.
 
-**Face detection stays on Haar cascade, not YOLOv8.** Everything
-downstream — the age/gender and emotion classifiers, all real-world
-evaluation work in `docs/model_evaluation.md` — was built and validated
-against the existing Haar cascade `FaceDetector`. A deep-learning face
-detector (YOLOv8 in detection mode, or a dedicated face model) would
-likely generalize better across angle, distance, and lighting than Haar
-cascade — particularly for the non-frontal-angle and false-positive
-failure modes documented in `docs/model_evaluation.md` — but that is a
-separate, untrained, unvalidated component. Swapping it in is deferred to
-a future detection-pipeline ticket rather than folded into this one.
+**Face detection runs on a fine-tuned YOLOv8 model, not Haar cascade.**
+`FaceDetector` originally wrapped OpenCV's bundled Haar cascade
+classifier. It was replaced after real-world evaluation (see
+`docs/model_evaluation.md`) showed the YOLOv8 detector dramatically
+outperforming Haar cascade on exactly the failure modes that motivated
+looking for a replacement: detection rate on non-frontal angles jumped
+from Haar's documented 27% (side view) / 46% (looking down) to ~97-100%,
+and a background object that reliably fooled Haar cascade fooled the
+YOLOv8 detector far less often. See `docs/models/widerface_baseline.md`
+and `docs/models/widerface_finetune.md` for how the detector was trained.
 
 ## Usage
 
@@ -60,28 +60,18 @@ a future detection-pipeline ticket rather than folded into this one.
 PYTHONPATH=. ./venv/bin/python3 -m src.retailvision.pipeline_demo                      # live camera, default index 0
 PYTHONPATH=. ./venv/bin/python3 -m src.retailvision.pipeline_demo --source path/to.mp4 # pre-recorded video file
 PYTHONPATH=. ./venv/bin/python3 -m src.retailvision.pipeline_demo --benchmark          # headless, prints average FPS on exit
-PYTHONPATH=. ./venv/bin/python3 -m src.retailvision.pipeline_demo --detector yolo-final # try a YOLOv8 face detector instead of Haar cascade
 ```
 
 Per the project's testing convention, point `--source` at a pre-recorded
 video file first — a deterministic input is much easier to debug against
 than a live camera feed — before testing on the live camera.
 
-`--detector` (`haar`, the default; or `yolo-baseline`/`yolo-final`,
-loading `models/face_detection/baseline.pt`/`final.pt`) is a demo-only
-override for visually trying an alternative face detector under
-real-world evaluation. It does not change production behavior — `haar`
-stays the default, and `FaceDetector` itself is untouched.
-
 ## Performance
 
-Headless benchmark, single detected face per frame, Apple Silicon (MPS):
-**~61 FPS**, well above the 10 FPS minimum. This measures the
-classification cost (three YOLOv8 classifier calls per detected face)
-with detection itself mocked to a fixed box, since the real bottleneck at
-scale is per-face classification cost multiplying with face count, not
-Haar cascade detection. Real end-to-end FPS on live camera/video input —
-including actual detection cost and, in non-benchmark mode, display
-overhead — should be measured per-deployment with `--benchmark` against
-real footage; multiple simultaneous faces will scale classification cost
-roughly linearly.
+*TBD — re-benchmark with `--benchmark` now that `FaceDetector` runs a
+YOLOv8 model instead of Haar cascade. Detection itself now costs a real
+model inference per frame (previously a lightweight classical
+algorithm), on top of the three classifier calls per detected face — the
+old ~61 FPS figure (measured with detection mocked to a fixed box, so it
+never actually reflected Haar cascade's own cost either) should not be
+assumed to still hold and needs a fresh number.*

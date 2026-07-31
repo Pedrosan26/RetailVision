@@ -2,7 +2,7 @@
 inference.py
 
 Unified real-time inference pipeline: for each camera frame, detects faces
-with the existing Haar cascade FaceDetector, then classifies age group,
+with the fine-tuned YOLOv8 FaceDetector, then classifies age group,
 gender, and emotion for every detected face using the fine-tuned YOLOv8
 classifiers (models/age_gender/final_age.pt, final_gender.pt,
 models/emotion/final.pt).
@@ -13,13 +13,6 @@ feeds all three classification heads. There is nothing to reconcile across
 models because they never produce independent boxes for the same face --
 IoU-based matching only becomes necessary if a future detector swap moves
 to per-model detection passes.
-
-The `detector` constructor argument exists for demo/evaluation purposes
-(see pipeline_demo.py's --detector flag) so an alternative detector -- e.g.
-a YOLOv8-based face detector under real-world evaluation -- can be tried
-without changing this pipeline's code. It's not a production feature: an
-actual detector swap, once real-world evaluation supports it, belongs
-inside FaceDetector itself, not via this parameter.
 """
 
 from pathlib import Path
@@ -51,10 +44,10 @@ def resolve_device() -> str:
 class InferencePipeline:
     """Detects faces and classifies age group, gender, and emotion per frame."""
 
-    def __init__(self, device: str | None = None, detector: object | None = None) -> None:
-        """Load the face detector (or use a supplied one) and all three fine-tuned classifiers once."""
+    def __init__(self, device: str | None = None) -> None:
+        """Load the face detector and all three fine-tuned classifiers once."""
         self.device = device or resolve_device()
-        self.detector = detector or FaceDetector()
+        self.detector = FaceDetector(device=self.device)
         self.models: dict[str, YOLO] = {task: YOLO(str(path)) for task, path in WEIGHTS.items()}
 
     def _classify(self, task: str, crop: np.ndarray) -> tuple[str, float]:

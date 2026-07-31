@@ -66,21 +66,25 @@ regression being largest on Hard (-2.31pp) and smallest on Easy
 small/dense/crowd-like faces — exactly the framing the augmentation
 was tuned to de-emphasize.
 
-**This is a hypothesis, not a confirmed explanation — it has not been
-tested.** WIDER FACE metrics alone cannot confirm or refute it; only
-real retail-camera footage can. That's exactly what RV-028 does, and
-per this ticket's original notes, it was always meant to be the actual
-gate for the production decision, not this dataset's own metrics. RV-028
-will evaluate **both** `baseline.pt` and `final.pt` against the same
-live footage, since that's the only way to actually answer "did the
-retail-tuned augmentation help" rather than assume it from a metric
-that may be structurally biased against it.
+**This was a hypothesis, not yet a confirmed explanation, at the time
+this fine-tune finished.** WIDER FACE metrics alone couldn't confirm or
+refute it; only real retail-camera footage could. Real-world evaluation
+against live footage — evaluating **both** `baseline.pt` and `final.pt`
+against the same recordings, so they'd be compared fairly rather than on
+two separate live takes — was run specifically to answer "did the
+retail-tuned augmentation help" rather than assume it from a metric that
+may be structurally biased against it. See `docs/model_evaluation.md`
+for the result: the hypothesis held up. Detection rate on the exact
+conditions this migration was about (non-frontal angles) jumped from
+Haar cascade's documented 27%/46% to ~97-100% for both checkpoints, and
+`final.pt` showed more resistance than `baseline.pt` to a recurring
+false-positive case in matched-frame comparison.
 
-**The Hard-recall threshold failure is real and stands as documented** —
-per this ticket's acceptance criteria ("mAP@0.5 improvement over
-baseline documented, or a documented reason if it doesn't improve"),
-this counts as the latter: a documented reason, not a passing result.
-Whether that's acceptable depends entirely on what RV-028 finds.
+**The Hard-recall threshold failure documented above is real and
+stands** — the WIDER FACE regression genuinely happened, and the
+explanation for it only became more than a hypothesis once real-world
+results came in. `final.pt` is now the production `FaceDetector` on the
+strength of that real-world result, not the WIDER FACE benchmark.
 
 ## Training health
 
@@ -103,7 +107,6 @@ distribution shift looks like rather than a training bug.
 - Loss/mAP curve: `models/face_detection/final_loss_curves.png`
 - Raw per-epoch log: `runs/widerface_finetune/widerface/results.csv`
 
-Not yet integrated into the live pipeline (`InferencePipeline` still uses
-Haar cascade). Next: real-world evaluation against live-camera footage
-(RV-028) — the actual gate for the production swap (RV-029), not this
-dataset's own metrics.
+This checkpoint is now the production `FaceDetector`, replacing Haar
+cascade — see `docs/model_evaluation.md` for the real-world evaluation
+that decided it, and `docs/inference_pipeline.md` for the integration.

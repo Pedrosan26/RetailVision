@@ -54,7 +54,7 @@ test set has no public ground truth, see `docs/datasets/widerface.md`):
    `scripts/widerface_baseline/official_eval.py` for the full
    implementation and rationale — notably, an earlier plan to substitute
    an ad-hoc face-count bucket (`0`, `1`, `2-5`, ..., `101+`, built for
-   RV-025's val/test split stratification) in place of the real
+   this dataset's own val/test split stratification) in place of the real
    Easy/Medium/Hard partition was reconsidered before writing evaluation
    code, in favor of the real official ground truth.
 
@@ -125,9 +125,9 @@ closely throughout, with `cls_loss` in particular converging to nearly
 the same value (~0.6) on both train and val by epoch 100. `precision(B)`,
 `recall(B)`, `mAP50(B)`, and `mAP50-95(B)` all rise smoothly and plateau
 around epoch 60-80, holding flat rather than regressing through the
-remaining epochs. Fine-tuning (RV-027) can lean on this: there's no
-early-stopping pressure this baseline is already fighting against, unlike
-the classification baselines' documented `patience` recommendation.
+remaining epochs. Fine-tuning can lean on this: there's no early-stopping
+pressure this baseline is already fighting against, unlike the
+classification baselines' documented `patience` recommendation.
 
 ## Artifacts
 
@@ -136,7 +136,8 @@ the classification baselines' documented `patience` recommendation.
 - Loss/mAP curve: `models/face_detection/baseline_loss_curves.png`
 - Raw per-epoch log: `runs/widerface_baseline/widerface/results.csv`
 
-Not yet integrated into the live pipeline (`InferencePipeline` still uses
-Haar cascade) — this is a standalone detector at this stage. Next:
-fine-tuning with augmentation tuned for retail camera conditions (RV-027),
-then real-world evaluation (RV-028) before the production swap (RV-029).
+This baseline itself was never integrated into the live pipeline — it
+was a starting point for fine-tuning (`docs/models/widerface_finetune.md`),
+whose output (`final.pt`) is what real-world evaluation validated and
+what `FaceDetector` runs today. See `docs/model_evaluation.md` for the
+real-world results that motivated the production swap.
