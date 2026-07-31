@@ -2,7 +2,7 @@
 
 AI-powered computer vision pipeline for real-time customer demographic detection, emotion recognition, foot traffic counting, and zone-engagement scoring in retail environments.
 
-Single-process pipeline: one service ingests camera streams and runs detection, demographic/emotion recognition, foot traffic counting, and zone-engagement scoring, rather than splitting these into separate microservices. Built on OpenCV (capture/detection) and PyTorch/Ultralytics YOLOv8 (recognition/classification, trained from scratch on public datasets rather than a pretrained fallback).
+Single-process pipeline: one service ingests camera streams and runs detection, demographic/emotion recognition, foot traffic counting, and zone-engagement scoring, rather than splitting these into separate microservices. Built on OpenCV (capture/display) and PyTorch/Ultralytics YOLOv8 (detection, recognition, and classification, trained from scratch on public datasets rather than a pretrained fallback).
 
 ## Setup
 
@@ -13,34 +13,38 @@ python3.12 -m venv venv
 
 The venv must be created with **Python 3.12** (via Homebrew's `python@3.12`), not the system `/usr/bin/python3` (3.9.6, too old) and not another project's venv that may be first on `PATH`.
 
-`opencv-python` is pinned to `4.10.0.84` in `requirements.txt` — the current latest ships a broken build on macOS missing `cv2.CascadeClassifier` and the bundled Haar cascade XML files. Don't bump this pin without verifying `cv2.CascadeClassifier` and `cv2.data.haarcascades` still work.
+`opencv-python` is pinned to `4.10.0.84` in `requirements.txt` — the current latest shipped a broken build on macOS missing `cv2.CascadeClassifier` and the bundled Haar cascade XML files. Production code no longer uses either (`FaceDetector` now runs a YOLOv8 model), but the pin hasn't been re-verified against a newer opencv-python for the other cv2 functionality still used throughout (capture, display, video I/O) — don't bump it without testing generally, not just checking Haar cascade support.
 
 
 ## Running the live pipeline
 
 ```
-./venv/bin/python3 -m src.retailvision.pipeline_demo   # live camera preview with face-detection boxes
-./venv/bin/python3 -m src.retailvision.camera_test      # camera-only sanity check, no detection
+PYTHONPATH=. ./venv/bin/python3 -m src.retailvision.pipeline_demo                       # live camera, full age/gender/emotion pipeline
+PYTHONPATH=. ./venv/bin/python3 -m src.retailvision.pipeline_demo --source path/to.mp4  # pre-recorded video file instead of live camera
+PYTHONPATH=. ./venv/bin/python3 -m src.retailvision.pipeline_demo --benchmark           # headless, prints average FPS on exit
+./venv/bin/python3 -m src.retailvision.camera_test                                      # camera-only sanity check, no detection
 ```
 
-Both open a live window; press `q` to quit. Currently reads only from the laptop's default camera (`cv2.VideoCapture(0)`); multi-camera support is planned but not yet implemented.
+The live/video modes open a preview window; press `q` to quit. Currently reads only from the laptop's default camera (`cv2.VideoCapture(0)`) or a local video file; multi-camera support is planned but not yet implemented. See `docs/inference_pipeline.md` for the pipeline's architecture, design decisions, and FPS results.
 
 ## Module layout
 
 - `src/retailvision/camera_test.py` — minimal camera-open/read sanity check.
-- `src/retailvision/detection.py` — `FaceDetector`, wraps OpenCV's bundled Haar cascade classifier. First stage of the pipeline.
-- `src/retailvision/pipeline_demo.py` — wires capture → `FaceDetector` → live preview with drawn bounding boxes. Entry point later stages (demographics, emotion, tracking, zone scoring) get added onto.
+- `src/retailvision/detection.py` — `FaceDetector`, runs a YOLOv8 detection-mode model trained from scratch on WIDER FACE and fine-tuned for retail camera conditions. First stage of the pipeline.
+- `src/retailvision/inference.py` — `InferencePipeline`, combines `FaceDetector` with the fine-tuned age/gender and emotion classifiers into one per-frame call. See `docs/inference_pipeline.md`.
+- `src/retailvision/pipeline_demo.py` — wires capture (camera or video file) → `InferencePipeline` → live preview with drawn bounding boxes and predictions, or a headless FPS benchmark.
 
 ## Dataset preparation
 
-Datasets live under gitignored `data/<dataset>/raw/` (original downloads) and `data/<dataset>/processed/` (YOLOv8-classification-ready folder trees + a `distribution_report.json`). Human-readable documentation of sourcing, format decisions, and class distributions is tracked in `docs/datasets/`.
+Datasets live under gitignored `data/<dataset>/raw/` (original downloads) and `data/<dataset>/processed/` (prepared, training-ready layout + a `distribution_report.json`). Human-readable documentation of sourcing, format decisions, and class distributions is tracked in `docs/datasets/`.
 
 ```
-PYTHONPATH=scripts ./venv/bin/python3 scripts/prepare_utkface.py   # age/gender labels, see docs/datasets/utkface.md
-PYTHONPATH=scripts ./venv/bin/python3 scripts/prepare_fer2013.py   # 7 emotion classes, see docs/datasets/fer2013.md
+PYTHONPATH=scripts ./venv/bin/python3 scripts/prepare_utkface.py    # age/gender labels, see docs/datasets/utkface.md
+PYTHONPATH=scripts ./venv/bin/python3 scripts/prepare_fer2013.py    # 7 emotion classes, see docs/datasets/fer2013.md
+PYTHONPATH=scripts ./venv/bin/python3 scripts/prepare_widerface.py  # face bounding boxes, see docs/datasets/widerface.md
 ```
 
-Both datasets consist of pre-cropped single-face images, so they're prepared as YOLOv8 **classification** datasets (folder-per-class), face localization is a separate upstream pipeline stage.
+UTKFace and FER-2013 consist of pre-cropped single-face images, so they're prepared as YOLOv8 **classification** datasets (folder-per-class); face localization is a separate upstream pipeline stage. WIDER FACE is the exception — it's full scenes with bounding-box annotations, prepared as a YOLOv8 **detection** dataset (`images/` + matching `labels/`) instead, for training the face detector `FaceDetector` now runs in production.
 
 - **UTKFace** (`scripts/utkface_prep/`) — 33,481 images, age binned into `0-17`/`18-30`/`31-50`/`51+`, gender mapped to `Male`/`Female`, stratified 70/15/15 split. Known imbalance: White overrepresented ~5.5x across race labels (documented, not corrected).
 - **FER-2013** (`scripts/fer2013_prep/`) — 35,887 images across 7 emotion classes. Official test split kept untouched; a stratified 10% validation split is carved out of train. Known imbalance: Disgust is severely underrepresented (1.5% of data); Fear is normal-sized but documented as noisy/confusable with Sad and Surprise.
@@ -93,6 +97,32 @@ PYTHONPATH=scripts ./venv/bin/python3 scripts/evaluate_emotion_finetune.py  # pe
 - Final weights are saved to `models/emotion/final.pt`.
 - Neutral failed its 80% recall threshold across two fine-tuning iterations (67.6%, 67.3%) with confusion-matrix evidence of a structural neutral/sad overlap at FER-2013's 48×48 resolution. DeepFace's pre-trained emotion model was evaluated as an alternative (`scripts/evaluate_emotion_deepface.py`) but performed worse on every class (56.4% vs. our 69.7% overall) and was rejected. Our fine-tuned classifier remains production; Neutral (alongside Fear/Disgust) is accepted as a documented limitation. Full investigation: `docs/models/emotion_finetune.md`.
 
+### Face detector
+
+A `yolov8n` **detection**-mode model trained from scratch on WIDER FACE — the project's first detection-mode YOLOv8 run (age/gender/emotion are all classification-mode `yolov8n-cls`). The fine-tuned checkpoint is now the production `FaceDetector`, replacing the original Haar cascade implementation.
+
+```
+PYTHONPATH=scripts ./venv/bin/python3 scripts/train_widerface_baseline.py     # trains the face-detection baseline
+PYTHONPATH=scripts ./venv/bin/python3 scripts/evaluate_widerface_baseline.py  # mAP/precision/recall + official Easy/Medium/Hard recall, report
+```
+
+- `scripts/widerface_baseline/` — training/evaluation package; evaluation includes both Ultralytics' own detection metrics and WIDER FACE's real, author-defined Easy/Medium/Hard difficulty partition (downloaded separately from the dataset's `eval_tools` package — the partition can't be reconstructed from the raw box annotations alone).
+- Trained weights are saved to `models/face_detection/baseline.pt`.
+- Evaluation writes `models/face_detection/baseline_report.json` and a loss/mAP curve PNG. See `docs/models/widerface_baseline.md` for full results (76.23% mAP@0.5 on the held-out test split; recall degrades monotonically from 94.18% on Easy faces to 71.10% on Hard, the expected WIDER FACE pattern).
+
+Fine-tuning retrains from `yolov8n.pt` with augmentation tuned for the retail-camera domain gap documented in `docs/datasets/widerface.md` (wider zoom range, reduced mosaic — mosaic shrinks every face to ~1/4 frame, compounding WIDER FACE's small-face bias in the wrong direction for this use case):
+
+```
+PYTHONPATH=scripts ./venv/bin/python3 scripts/finetune_widerface.py           # fine-tunes with retail-tuned augmentation
+PYTHONPATH=scripts ./venv/bin/python3 scripts/evaluate_widerface_finetune.py  # metrics vs. baseline, threshold check, report
+```
+
+- `scripts/widerface_finetune/` — fine-tune training package; reuses `widerface_baseline`'s evaluation/plotting helpers, which are generic across any trained checkpoint.
+- Final weights are saved to `models/face_detection/final.pt`.
+- Evaluation checks Hard-difficulty recall against a minimum threshold (71.10% — the baseline's own result). The fine-tune **regressed on every WIDER FACE metric** (mAP@0.5 74.63% vs. baseline's 76.23%; Hard recall 68.79%, failing the threshold) — the working hypothesis was that this was an expected cost of deliberately shifting training data toward retail-camera framing and away from WIDER FACE's own crowd-scene domain, not a training failure. See `docs/models/widerface_finetune.md` for the full analysis.
+
+That hypothesis held up: real-world evaluation against live footage (both checkpoints, replayed against the same recordings for a fair comparison — see `docs/model_evaluation.md`) told the opposite story from the WIDER FACE metrics. Detection rate on the two conditions that motivated this migration in the first place — non-frontal angles, where Haar cascade's documented rates were 27% (side view) and 46% (looking down) — jumped to **~97-100%** for both checkpoints. A recurring background object (already documented as a Haar cascade false-positive case) fooled both checkpoints similarly often, except the fine-tuned checkpoint showed more resistance to it in matched-frame comparison (small sample, but consistent), and a dedicated empty-background test showed both checkpoints near-zero false-positive rate. The fine-tuned checkpoint (`final.pt`) is now production, on the strength of the real-world result, not the WIDER FACE benchmark.
+
 ## Live demo
 
 To just watch the current classifiers and the age-regression model run on your own webcam, with no ground truth or logging needed:
@@ -127,6 +157,19 @@ PYTHONPATH=.:scripts ./venv/bin/python3 scripts/summarize_emotion_real_world_eva
 
 - `scripts/emotion_real_world_eval/` — live-capture package, mirroring `real_world_eval/`'s structure.
 - Summarization writes `models/emotion/real_world_eval_report.json`, comparing each condition against the *specific* held-emotion's test-set recall (not the blended overall top1 — see the script's docstring for why that distinction matters here).
+
+**Face detector** — unlike the classifiers above, this evaluates two YOLOv8 checkpoints (`baseline.pt`, `final.pt`) side by side against the Haar cascade's own documented detection rates, plus a dedicated false-positive stress test (camera pointed at a background, no person in frame). Each condition is **recorded once** and replayed through both checkpoints, so they're compared on identical frames rather than two separate live takes:
+
+```
+PYTHONPATH=.:scripts ./venv/bin/python3 scripts/record_widerface_eval_session.py --condition <name>
+PYTHONPATH=.:scripts ./venv/bin/python3 scripts/evaluate_widerface_real_world.py --condition <name> --model baseline
+PYTHONPATH=.:scripts ./venv/bin/python3 scripts/evaluate_widerface_real_world.py --condition <name> --model final
+PYTHONPATH=.:scripts ./venv/bin/python3 scripts/summarize_widerface_real_world_eval.py
+```
+
+- `scripts/widerface_real_world_eval/` — record/evaluate package; recording has no model inference (keeps it checkpoint-agnostic), evaluation replays the saved video through one chosen checkpoint.
+- Conditions: `close_1m`, `medium_2m`, `far_4m`, `side_view`, `looking_down`, `no_person_background` (the false-positive test — any detection here is unambiguous, not a matter of degree). `far_4m` wasn't run — close and medium range were already both ~100% for both checkpoints, and the two conditions that actually motivated this evaluation (the non-frontal angles) were fully covered.
+- Summarization writes `models/face_detection/real_world_eval_report.json`, comparing detection rate per condition against the Haar cascade's documented rates.
 
 ## Age regression (continuous age for live display)
 
