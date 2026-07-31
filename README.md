@@ -157,6 +157,19 @@ PYTHONPATH=.:scripts ./venv/bin/python3 scripts/summarize_emotion_real_world_eva
 - `scripts/emotion_real_world_eval/` — live-capture package, mirroring `real_world_eval/`'s structure.
 - Summarization writes `models/emotion/real_world_eval_report.json`, comparing each condition against the *specific* held-emotion's test-set recall (not the blended overall top1 — see the script's docstring for why that distinction matters here).
 
+**Face detector** — unlike the classifiers above, this evaluates two YOLOv8 checkpoints (`baseline.pt`, `final.pt`) side by side against the Haar cascade's own documented detection rates, plus a dedicated false-positive stress test (camera pointed at a background, no person in frame). Each condition is **recorded once** and replayed through both checkpoints, so they're compared on identical frames rather than two separate live takes:
+
+```
+PYTHONPATH=.:scripts ./venv/bin/python3 scripts/record_widerface_eval_session.py --condition <name>
+PYTHONPATH=.:scripts ./venv/bin/python3 scripts/evaluate_widerface_real_world.py --condition <name> --model baseline
+PYTHONPATH=.:scripts ./venv/bin/python3 scripts/evaluate_widerface_real_world.py --condition <name> --model final
+PYTHONPATH=.:scripts ./venv/bin/python3 scripts/summarize_widerface_real_world_eval.py
+```
+
+- `scripts/widerface_real_world_eval/` — record/evaluate package; recording has no model inference (keeps it checkpoint-agnostic), evaluation replays the saved video through one chosen checkpoint.
+- Conditions: `close_1m`, `medium_2m`, `far_4m`, `side_view`, `looking_down`, `no_person_background` (the false-positive test — any detection here is unambiguous, not a matter of degree).
+- Summarization writes `models/face_detection/real_world_eval_report.json`, comparing detection rate per condition against the Haar cascade's documented rates.
+
 ## Age regression (continuous age for live display)
 
 The 4-bin classifier is coarse for live feedback ("18-30" isn't very informative). A separate model predicts a continuous age (e.g. "~25") for display, while the classifier continues to handle analytics/reporting. An earlier attempt to solve this by re-binning the classifier into narrower classes (7, then 10) was abandoned — adult age brackets plateaued at 50-65% F1 regardless of tuning; see `docs/models/age_rebinning_investigation.md`. Regression sidesteps that ceiling entirely since there are no bin boundaries to be confused across.
