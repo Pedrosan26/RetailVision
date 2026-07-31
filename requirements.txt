@@ -10,7 +10,7 @@ pandas
 # pulled in transitively by scikit-learn, but listed explicitly since our own
 # code imports it directly.
 scipy
-# deepface + tf-keras: RET-9's DeepFace fallback comparison
+# deepface + tf-keras: the emotion model's DeepFace fallback comparison
 # (scripts/evaluate_emotion_deepface.py) only, not used in the production
 # pipeline — pulls in TensorFlow as a backend. tf-keras must be listed
 # explicitly: deepface's Keras-3-era release doesn't declare it as a
