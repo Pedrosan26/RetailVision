@@ -13,6 +13,12 @@ rather than waiting on unreachable input. Per the project's testing
 convention, point --source at a pre-recorded video file first -- a
 deterministic input makes debugging far easier than a live camera feed --
 before testing against the live camera.
+
+--detector lets a YOLOv8-based face detector (under real-world
+evaluation as an eventual replacement for Haar cascade) be tried in the
+live pipeline for a quick visual look. This is a demo-only override, not
+a production capability: an actual detector swap, once real-world
+evaluation supports it, belongs inside FaceDetector itself.
 """
 
 import argparse
@@ -20,11 +26,42 @@ import time
 
 import cv2
 
+from .detection import FaceDetector
 from .inference import InferencePipeline
+
+_YOLO_FACE_WEIGHTS = {
+    "yolo-baseline": "models/face_detection/baseline.pt",
+    "yolo-final": "models/face_detection/final.pt",
+}
+
+
+class _YoloFaceDetector:
+    """Demo-only: wraps a YOLOv8 face-detection checkpoint behind FaceDetector's same detect(frame) interface."""
+
+    def __init__(self, weights_path: str) -> None:
+        """Load the given YOLOv8 detection checkpoint."""
+        from ultralytics import YOLO
+
+        self._model = YOLO(weights_path)
+
+    def detect(self, frame) -> list[tuple[int, int, int, int]]:
+        """Detect faces in a BGR frame, returning (x, y, w, h) boxes."""
+        result = self._model.predict(source=frame, verbose=False)[0]
+        boxes = []
+        for x1, y1, x2, y2 in result.boxes.xyxy.tolist():
+            boxes.append((int(x1), int(y1), int(x2 - x1), int(y2 - y1)))
+        return boxes
+
+
+def build_detector(name: str):
+    """Construct the requested detector: Haar cascade, or a YOLOv8 checkpoint by name."""
+    if name == "haar":
+        return FaceDetector()
+    return _YoloFaceDetector(_YOLO_FACE_WEIGHTS[name])
 
 
 def parse_args() -> argparse.Namespace:
-    """Parse --source, --benchmark, and --duration (benchmark auto-stop, seconds)."""
+    """Parse --source, --benchmark, --duration, and --detector."""
     parser = argparse.ArgumentParser(description="Run the RetailVision inference pipeline")
     parser.add_argument(
         "--source",
@@ -41,6 +78,12 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=15.0,
         help="Benchmark mode only: seconds to run before stopping automatically (default: 15)",
+    )
+    parser.add_argument(
+        "--detector",
+        default="haar",
+        choices=["haar", *_YOLO_FACE_WEIGHTS.keys()],
+        help="Face detector to use (default: haar, the production detector)",
     )
     return parser.parse_args()
 
@@ -72,8 +115,8 @@ def main() -> None:
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-    pipeline = InferencePipeline()
-    print(f"Source opened at {width}x{height} on device: {pipeline.device}.")
+    pipeline = InferencePipeline(detector=build_detector(args.detector))
+    print(f"Source opened at {width}x{height} on device: {pipeline.device}. Detector: {args.detector}.")
     if args.benchmark:
         print(f"Benchmark mode: running for up to {args.duration:.0f}s (Ctrl+C also stops cleanly).")
     else:

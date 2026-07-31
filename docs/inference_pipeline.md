@@ -60,11 +60,18 @@ a future detection-pipeline ticket rather than folded into this one.
 PYTHONPATH=. ./venv/bin/python3 -m src.retailvision.pipeline_demo                      # live camera, default index 0
 PYTHONPATH=. ./venv/bin/python3 -m src.retailvision.pipeline_demo --source path/to.mp4 # pre-recorded video file
 PYTHONPATH=. ./venv/bin/python3 -m src.retailvision.pipeline_demo --benchmark          # headless, prints average FPS on exit
+PYTHONPATH=. ./venv/bin/python3 -m src.retailvision.pipeline_demo --detector yolo-final # try a YOLOv8 face detector instead of Haar cascade
 ```
 
 Per the project's testing convention, point `--source` at a pre-recorded
 video file first — a deterministic input is much easier to debug against
 than a live camera feed — before testing on the live camera.
+
+`--detector` (`haar`, the default; or `yolo-baseline`/`yolo-final`,
+loading `models/face_detection/baseline.pt`/`final.pt`) is a demo-only
+override for visually trying an alternative face detector under
+real-world evaluation. It does not change production behavior — `haar`
+stays the default, and `FaceDetector` itself is untouched.
 
 ## Performance
 

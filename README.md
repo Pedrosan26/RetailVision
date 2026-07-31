@@ -19,10 +19,11 @@ The venv must be created with **Python 3.12** (via Homebrew's `python@3.12`), no
 ## Running the live pipeline
 
 ```
-PYTHONPATH=. ./venv/bin/python3 -m src.retailvision.pipeline_demo                      # live camera, full age/gender/emotion pipeline
-PYTHONPATH=. ./venv/bin/python3 -m src.retailvision.pipeline_demo --source path/to.mp4 # pre-recorded video file instead of live camera
-PYTHONPATH=. ./venv/bin/python3 -m src.retailvision.pipeline_demo --benchmark          # headless, prints average FPS on exit
-./venv/bin/python3 -m src.retailvision.camera_test                                     # camera-only sanity check, no detection
+PYTHONPATH=. ./venv/bin/python3 -m src.retailvision.pipeline_demo                       # live camera, full age/gender/emotion pipeline
+PYTHONPATH=. ./venv/bin/python3 -m src.retailvision.pipeline_demo --source path/to.mp4  # pre-recorded video file instead of live camera
+PYTHONPATH=. ./venv/bin/python3 -m src.retailvision.pipeline_demo --benchmark           # headless, prints average FPS on exit
+PYTHONPATH=. ./venv/bin/python3 -m src.retailvision.pipeline_demo --detector yolo-final # demo-only: try a YOLOv8 face detector instead of Haar cascade
+./venv/bin/python3 -m src.retailvision.camera_test                                      # camera-only sanity check, no detection
 ```
 
 The live/video modes open a preview window; press `q` to quit. Currently reads only from the laptop's default camera (`cv2.VideoCapture(0)`) or a local video file; multi-camera support is planned but not yet implemented. See `docs/inference_pipeline.md` for the pipeline's architecture, design decisions, and FPS results.
