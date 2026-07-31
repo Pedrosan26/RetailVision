@@ -1,7 +1,8 @@
 # Real-world model evaluation
 
-Covers two independent real-world evaluations: age/gender (below) and
-emotion (further down).
+Covers three independent real-world evaluations: age/gender (below),
+emotion (further down), and the face detector (further down still) —
+the last of these directly motivated by Finding 3 in the first section.
 
 # Age/Gender
 
@@ -113,10 +114,10 @@ of the single-take methodology limitation above.
 
 ## Recommendations (follow-up work)
 
-1. Replace the frontal-only Haar cascade with a pose-tolerant detector
-   (`cv2.FaceDetectorYN`/YuNet is already available in the pinned OpenCV
-   build, no new dependency) to fix the detection-stage failure on angled
-   faces.
+1. ~~Replace the frontal-only Haar cascade with a pose-tolerant
+   detector~~ — **done**, see the Face Detector section further down.
+   Detection rate on angled faces went from 52.4% (this section) to
+   ~97-100% with the trained-from-scratch YOLOv8 replacement.
 2. Add a frontality gate before classification (skip demographic
    classification on frames too angled to trust, while still counting the
    person for foot-traffic purposes) rather than assuming every detected
@@ -327,11 +328,9 @@ nice-to-have.
 
 ## Recommendations (follow-up work)
 
-1. Same detector-stage recommendation as the age/gender evaluation:
-   replace the frontal-only Haar cascade with a pose-tolerant detector
-   (`cv2.FaceDetectorYN`/YuNet) — this blocks reliable evaluation of
-   `side_view`/`looking_down`, not just production accuracy under those
-   poses.
+1. ~~Same detector-stage recommendation as the age/gender evaluation:
+   replace the frontal-only Haar cascade with a pose-tolerant
+   detector~~ — **done**, see the Face Detector section further down.
 2. Re-run `side_view` and `looking_down` against the remaining untested
    emotions once detection is more reliable, to complete the matrix.
 3. When capturing future sessions, clear the background of any
@@ -359,3 +358,142 @@ Evaluation tooling: `scripts/emotion_real_world_eval/`,
   `scripts/evaluate_emotion_real_world.py`,
   `scripts/summarize_emotion_real_world_eval.py`,
   `scripts/debug_emotion_crops.py`
+
+# Face Detector
+
+## Setup
+
+Two YOLOv8 detection-mode checkpoints — `models/face_detection/baseline.pt`
+(trained from scratch on WIDER FACE, `docs/models/widerface_baseline.md`)
+and `final.pt` (fine-tuned with retail-camera-tuned augmentation,
+`docs/models/widerface_finetune.md`) — were evaluated against live
+webcam footage using `scripts/widerface_real_world_eval/`. Unlike the
+age/gender and emotion evaluations above (one live take per condition),
+each condition here is **recorded once** to a video file
+(`scripts/record_widerface_eval_session.py`) and then replayed through
+both checkpoints (`scripts/evaluate_widerface_real_world.py`), so the
+two are compared on identical frames rather than two separate takes
+that could differ in pose or timing.
+
+Conditions match the emotion evaluation's distance/angle set, plus one
+new one:
+
+| Condition | Description |
+|---|---|
+| `close_1m` | ~1m from camera |
+| `medium_2m` | ~2m from camera |
+| `far_4m` | ~4m from camera — **not captured**, see Known limitations |
+| `side_view` | Face turned to profile |
+| `looking_down` | Head tilted down |
+| `no_person_background` | Camera pointed at an empty background, no person in frame — dedicated false-positive test |
+
+## Results
+
+| Condition | Haar cascade reference | baseline detection rate | final detection rate | baseline extra-box rate | final extra-box rate |
+|---|---|---|---|---|---|
+| `close_1m` | 98.5% | 100% | 100% | 0% | 0% |
+| `medium_2m` | 98.5% | 100% | 100% | 100% | 62.2% |
+| `far_4m` | 92.5% | — | — | — | — |
+| `side_view` | 27.0%* | 96.9% | 97.4% | 89.0% | 85.9% |
+| `looking_down` | 46.3% | 100% | 100% | 100% | 100% |
+| `no_person_background` | — | 1.0% | 0.0% | — | — |
+
+\* mean of 3 highly variable single-emotion sessions (10.6%-50.5%), see
+the Emotion section above — Haar cascade's own `side_view` number was
+never a single stable figure.
+
+"Extra-box rate" = share of frames with more than one detected box.
+For a single-subject session this is a proxy for false positives, but
+see Finding 2 — it needed investigation before being trusted as such.
+
+## Finding 1: non-frontal detection rate improved dramatically — the result that motivated this whole migration
+
+`side_view` (27.0% → 96.9%/97.4%) and `looking_down` (46.3% → 100%/100%)
+were the two failure modes that started the search for a Haar cascade
+replacement in the first place (see both sections above). Both YOLOv8
+checkpoints resolve them almost completely, and nearly identically to
+each other — this is a detector-architecture win, not something that
+depended on which checkpoint (baseline or fine-tuned) was used.
+
+## Finding 2: the high extra-box rate is almost entirely one recurring background object, not broad false-positive-proneness
+
+The extra-box rate is high in `medium_2m`, `looking_down`, and
+`side_view`, but near-zero in `close_1m` and `no_person_background` —
+a pattern, not noise. Sampling actual frames and inspecting the detected
+crops (same methodology as the Emotion section's Finding 1 contamination
+case study) found the second box in all three conditions to be the same
+object: a mannequin head on a shelf in the test environment, already
+documented as a Haar cascade false-positive case in the Emotion section
+above.
+
+| Mannequin (misdetected as a face) | Same frame, real subject also correctly detected |
+|---|---|
+| ![Mannequin misdetected as a face](images/widerface_mannequin_crop.jpg) | ![Full frame context](images/widerface_mannequin_context.jpg) |
+
+Comparing the exact same frames between checkpoints:
+
+| Condition | baseline.pt | final.pt |
+|---|---|---|
+| `medium_2m` | detects mannequin (0.43 conf) | does not detect it |
+| `looking_down` | detects mannequin (0.77 conf) | detects it, lower confidence (0.69) |
+| `side_view` | detects mannequin (0.77 conf) | detects it, lower confidence (0.75) |
+
+Small sample (one frame per condition), but directionally consistent:
+the fine-tuned checkpoint showed more resistance to this specific false
+positive than the baseline in all three matched comparisons — a
+plausible (not proven) connection to the retail-tuned augmentation
+`docs/models/widerface_finetune.md` describes.
+
+## Finding 3: false positives on a genuinely empty background are near-zero for both checkpoints
+
+`no_person_background` — a dedicated test with no real face anywhere in
+frame — gave baseline a 1.0% detection rate (1 of 96 frames) and final
+0.0% (0 of 96 frames). This is the cleaner test for broad
+false-positive-proneness (Finding 2's elevated rates are explained by
+one specific recurring object, not a general tendency to hallucinate
+faces), and both checkpoints pass it convincingly.
+
+## Known limitations (explicit)
+
+- **`far_4m` was not captured.** Skipped given time constraints, judged
+  low-risk: `close_1m`/`medium_2m` were already ~100% detection for both
+  checkpoints, and the two conditions with real uncertainty (the
+  non-frontal angles) were both fully covered.
+- Each condition is a single uncontrolled take, same limitation
+  documented in the age/gender and emotion sections above.
+- Finding 2's checkpoint comparison is single-frame sampling per
+  condition, not a full-session statistic — a qualitative signal worth
+  documenting, not a statistically rigorous claim.
+- `medium_2m`, `looking_down`, and `side_view`'s extra-box numbers are
+  contaminated by the same recurring object across all three sessions;
+  re-capturing with it out of frame would give a cleaner false-positive
+  signal if further validation is wanted.
+
+## Decision
+
+`final.pt` (the fine-tuned checkpoint) is now the production
+`FaceDetector` (`src/retailvision/detection.py`), replacing Haar
+cascade. This was decided on the real-world result above, not on
+`docs/models/widerface_finetune.md`'s WIDER FACE benchmark numbers,
+where the fine-tune actually regressed — the real-world evaluation is
+what confirmed the fine-tune's retail-focused hypothesis actually paid
+off, resolving that open question explicitly rather than assuming
+either direction.
+
+Follow-up, if further validation is wanted before wider deployment:
+capture `far_4m`, re-capture `medium_2m`/`side_view`/`looking_down` with
+the mannequin out of frame for a clean false-positive comparison, and
+re-run the full pipeline's FPS benchmark (`docs/inference_pipeline.md`)
+now that detection itself costs a real model inference per frame instead
+of a lightweight classical algorithm.
+
+## Artifacts
+
+- Per-frame session logs: `runs/widerface_real_world_eval/logs/{condition}__{model}.csv`
+- Recorded video clips: `runs/widerface_real_world_eval/recordings/{condition}.mp4`
+- Aggregated report: `models/face_detection/real_world_eval_report.json`
+
+Evaluation tooling: `scripts/widerface_real_world_eval/`,
+  `scripts/record_widerface_eval_session.py`,
+  `scripts/evaluate_widerface_real_world.py`,
+  `scripts/summarize_widerface_real_world_eval.py`

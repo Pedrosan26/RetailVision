@@ -2,7 +2,7 @@
 inference.py
 
 Unified real-time inference pipeline: for each camera frame, detects faces
-with the existing Haar cascade FaceDetector, then classifies age group,
+with the fine-tuned YOLOv8 FaceDetector, then classifies age group,
 gender, and emotion for every detected face using the fine-tuned YOLOv8
 classifiers (models/age_gender/final_age.pt, final_gender.pt,
 models/emotion/final.pt).
@@ -47,7 +47,7 @@ class InferencePipeline:
     def __init__(self, device: str | None = None) -> None:
         """Load the face detector and all three fine-tuned classifiers once."""
         self.device = device or resolve_device()
-        self.detector = FaceDetector()
+        self.detector = FaceDetector(device=self.device)
         self.models: dict[str, YOLO] = {task: YOLO(str(path)) for task, path in WEIGHTS.items()}
 
     def _classify(self, task: str, crop: np.ndarray) -> tuple[str, float]:

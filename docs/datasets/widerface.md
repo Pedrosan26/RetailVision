@@ -108,18 +108,18 @@ close-to-medium range, not tens of small faces in a crowd.
 This is documented explicitly, the same way UTKFace's race imbalance and
 FER-2013's Disgust scarcity are documented, so any accuracy gap between
 WIDER FACE test-set metrics and real retail-camera performance is
-explainable rather than a surprise. It's also precisely why RV-028 (real
-world evaluation) validates directly against retail-style live-camera
-footage rather than trusting WIDER FACE metrics alone before the
-production swap in RV-029.
+explainable rather than a surprise. It's also precisely why real-world
+evaluation against retail-style live-camera footage, not WIDER FACE
+metrics alone, is what decided the production detector swap — see
+`docs/model_evaluation.md`.
 
 ## Augmentation strategy
 
-The baseline (RV-026) deliberately used pure Ultralytics defaults, no
+The baseline deliberately used pure Ultralytics defaults, no
 augmentation tuning — it needed to be a faithful "defaults" floor to
 fine-tune against, same rationale as every classification baseline in
-this project. Tuning happened at fine-tuning time (RV-027,
-`scripts/widerface_finetune/constants.py`) instead:
+this project. Tuning happened at fine-tuning time
+(`scripts/widerface_finetune/constants.py`) instead:
 
 - **Horizontal flip (`fliplr=0.5`)**: safe — faces are roughly bilaterally
   symmetric.
@@ -132,8 +132,8 @@ this project. Tuning happened at fine-tuning time (RV-027,
   15px); a wider random-zoom range exposes the model to more "zoomed in,
   large face" training crops than the raw data provides on its own.
 - **Mosaic (`mosaic=0.5`, down from the detection default 1.0)**: revised
-  from RV-025's original plan to keep mosaic at its default. Mosaic
-  stitches 4 images into one training frame, so each sub-image only
+  from this dataset's own original plan to keep mosaic at its default.
+  Mosaic stitches 4 images into one training frame, so each sub-image only
   occupies roughly 1/4 of the frame — every face ends up looking
   smaller/more crowd-like than it actually is, compounding WIDER FACE's
   existing small-face bias in exactly the wrong direction for this use

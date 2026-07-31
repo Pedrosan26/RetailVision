@@ -75,8 +75,8 @@ AUGMENTATION = {
 # partition, evaluated in official_eval.py), evaluated on the held-out
 # test split. Hard is the most retail-relevant tier available at this
 # stage: not because it encodes the same difficulty axes as retail
-# footage (angle, lighting, distance -- that comparison is RV-028's job,
-# against live-camera conditions, not this dataset), but because
-# fine-tuning's whole purpose is to not regress on the baseline's own
-# result (71.10%).
+# footage (angle, lighting, distance -- that comparison belongs to
+# real-world evaluation against live-camera conditions, not this
+# dataset), but because fine-tuning's whole purpose is to not regress on
+# the baseline's own result (71.10%).
 MIN_HARD_RECALL = 0.7110
