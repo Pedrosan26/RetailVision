@@ -17,18 +17,24 @@ server/
     db.py                    # async engine + get_db() session dependency
     auth.py                  # camera-node API key verification
     models/detection.py      # SQLAlchemy ORM: DetectionEvent
-    schemas/detection.py     # Pydantic: mirrors the frozen 8-field schema
-    routers/ingest.py        # POST /api/v1/ingest
+    schemas/detection.py     # Pydantic: mirrors the frozen 8-field schema, plus read-endpoint response models
+    utils.py                 # as_utc(): normalizes SQLite's naive datetimes to match Postgres' aware ones
+    routers/
+      ingest.py                # POST /api/v1/ingest
+      detections.py             # GET /api/v1/detections
+      occupancy.py               # GET /api/v1/occupancy/live
+      aggregates.py               # GET /api/v1/aggregates
   migrations/                # Alembic (async)
   tests/                     # pytest, against an in-memory SQLite DB
 ```
 
-## Endpoint
+## Endpoints
 
-`POST /api/v1/ingest` — the only endpoint so far (read/aggregate
-endpoints for the dashboard are separate, later work). Validates a batch
-against the frozen schema, requires `X-API-Key` to match the configured
-key for the request's `camera_node_id`, and bulk-inserts on success.
+### `POST /api/v1/ingest`
+
+Validates a batch against the frozen schema, requires `X-API-Key` to
+match the configured key for the request's `camera_node_id`, and
+bulk-inserts on success.
 
 ```
 POST /api/v1/ingest
@@ -48,6 +54,37 @@ A malformed record (missing/wrong-typed field) returns `422`. A missing
 or incorrect `X-API-Key`, or an unrecognized `camera_node_id`, returns
 `401` -- all three cases are treated identically rather than leaking
 which part of the credential was wrong.
+
+### `GET /api/v1/detections`
+
+Recent detections, newest first. Query params: `limit` (default 100,
+capped at 1000), `camera_node_id`, `zone_id`, `since`, `until` (all
+optional filters).
+
+### `GET /api/v1/occupancy/live`
+
+The latest `count` per `COALESCE(zone_id, camera_node_id)`, computed
+with a `ROW_NUMBER() OVER (PARTITION BY ... ORDER BY timestamp DESC)`
+window query (portable across Postgres and SQLite, unlike Postgres-only
+`DISTINCT ON`). Groups by real zones automatically once zone
+configuration starts populating `zone_id` -- no query change needed at
+that point.
+
+### `GET /api/v1/aggregates`
+
+Time-windowed rollups: detection count, age/gender/emotion distribution,
+and average dwell/engagement per bucket. Query params: `window` (e.g.
+`5m`, `1h`, `24h`; default `5m`), `since`/`until` (default: last 24h),
+`zone_id`.
+
+Bucketing happens in Python, not via TimescaleDB's `time_bucket()` SQL
+function: one portable filtered query fetches matching rows, then
+`routers/aggregates.py::bucket_events()` groups and aggregates them.
+At the data volumes implied by a handful of camera nodes this is simple
+and fast enough that raw dialect-specific SQL isn't worth the
+portability cost, and it keeps the logic testable against the in-memory
+SQLite DB used in tests as well as real TimescaleDB in production. An
+unparseable `window` returns `400`.
 
 ## Authentication
 
