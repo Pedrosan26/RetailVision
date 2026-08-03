@@ -6,6 +6,10 @@ pre-recorded video file, runs each frame through InferencePipeline (face
 detection plus age/gender/emotion classification), shows a live preview
 with each detected person's bounding box and predictions drawn, and
 appends an anonymized log record for each detection (see output_log.py).
+Optionally also ships the same records to a central server in real time
+(see remote_log.py), for deployments running more than one camera node --
+this is a second, independent sink alongside the local log file, not a
+replacement for it.
 Supports a headless --benchmark mode (no display) to measure sustained
 FPS, since imshow overhead would otherwise skew the number -- benchmark
 mode has no window to capture a 'q' keypress, so it stops automatically
@@ -23,10 +27,11 @@ import cv2
 
 from .inference import InferencePipeline
 from .output_log import log_detection
+from .remote_log import RemoteLogShipper
 
 
 def parse_args() -> argparse.Namespace:
-    """Parse --source, --benchmark, and --duration (benchmark auto-stop, seconds)."""
+    """Parse --source, --benchmark, --duration, and the optional --server-url/--camera-node-id/--api-key trio."""
     parser = argparse.ArgumentParser(description="Run the RetailVision inference pipeline")
     parser.add_argument(
         "--source",
@@ -44,7 +49,26 @@ def parse_args() -> argparse.Namespace:
         default=15.0,
         help="Benchmark mode only: seconds to run before stopping automatically (default: 15)",
     )
-    return parser.parse_args()
+    parser.add_argument(
+        "--server-url",
+        default=None,
+        help="Central server base URL to also ship anonymized records to (e.g. http://localhost:8000). "
+        "Omit to log locally only.",
+    )
+    parser.add_argument(
+        "--camera-node-id",
+        default=None,
+        help="This machine's identifier, sent alongside shipped records. Required if --server-url is set.",
+    )
+    parser.add_argument(
+        "--api-key",
+        default=None,
+        help="API key for the central server. Required if --server-url is set.",
+    )
+    args = parser.parse_args()
+    if args.server_url and not (args.camera_node_id and args.api_key):
+        parser.error("--server-url requires both --camera-node-id and --api-key")
+    return args
 
 
 def open_source(source: str) -> cv2.VideoCapture:
@@ -75,6 +99,11 @@ def main() -> None:
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
     pipeline = InferencePipeline()
+    shipper = None
+    if args.server_url:
+        shipper = RemoteLogShipper(args.server_url, args.camera_node_id, args.api_key)
+        print(f"Shipping records to {args.server_url} as camera node '{args.camera_node_id}'.")
+
     print(f"Source opened at {width}x{height} on device: {pipeline.device}.")
     if args.benchmark:
         print(f"Benchmark mode: running for up to {args.duration:.0f}s (Ctrl+C also stops cleanly).")
@@ -99,6 +128,8 @@ def main() -> None:
             total_faces += len(detections)
             for det in detections:
                 log_detection(det)
+                if shipper is not None:
+                    shipper.ship(det)
 
             if args.benchmark:
                 now = time.perf_counter()
@@ -115,6 +146,8 @@ def main() -> None:
         elapsed = time.perf_counter() - start
         cap.release()
         cv2.destroyAllWindows()
+        if shipper is not None:
+            shipper.close()
         if frame_count:
             avg_faces = total_faces / frame_count
             print(
