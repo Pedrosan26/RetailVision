@@ -41,6 +41,18 @@ PYTHONPATH=. ./venv/bin/python3 -m unittest discover -s tests -v  # run the test
 - `src/retailvision/remote_log.py` — optional second sink: batches the same anonymized records and ships them to a central server in real time, for multi-node deployments. See `docs/multi_node.md`.
 - `src/retailvision/pipeline_demo.py` — wires capture (camera or video file) → `InferencePipeline` → live preview with drawn bounding boxes and predictions, or a headless FPS benchmark. Also logs every detection via `output_log.py`.
 
+## Server
+
+A separate FastAPI + TimescaleDB service (`server/`, its own venv/dependencies) receives anonymized records shipped by camera nodes and persists them for multi-node deployments. See `docs/server.md` for the full setup, schema, and API details.
+
+```
+cp .env.example .env && docker compose up -d timescaledb       # TimescaleDB on localhost:5433 (not 5432, avoids clashing with a local Postgres)
+cd server && python3.12 -m venv venv && ./venv/bin/pip install -r requirements.txt
+cp .env.example .env && ./venv/bin/alembic upgrade head        # creates the detection_events hypertable
+./venv/bin/uvicorn app.main:app --reload --port 8000            # http://localhost:8000/docs for the API
+./venv/bin/python3 -m pytest tests/ -v                          # run the server's test suite
+```
+
 ## Dataset preparation
 
 Datasets live under gitignored `data/<dataset>/raw/` (original downloads) and `data/<dataset>/processed/` (prepared, training-ready layout + a `distribution_report.json`). Human-readable documentation of sourcing, format decisions, and class distributions is tracked in `docs/datasets/`.
