@@ -3,8 +3,10 @@ pipeline_demo.py
 
 End-to-end demo of the RetailVision pipeline: opens a camera or a
 pre-recorded video file, runs each frame through InferencePipeline (face
-detection plus age/gender/emotion classification), shows a live preview
-with each detected person's bounding box and predictions drawn, and
+detection plus age/gender/emotion classification), tracks each detected
+face across frames and counts virtual-line crossings (see tracking.py,
+counter.py), shows a live preview with each detected person's bounding
+box, predictions, the counting line, and the running occupancy drawn, and
 appends an anonymized log record for each detection (see output_log.py).
 Supports a headless --benchmark mode (no display) to measure sustained
 FPS, since imshow overhead would otherwise skew the number -- benchmark
@@ -21,12 +23,14 @@ import time
 
 import cv2
 
+from .counter import LineCounter
 from .inference import InferencePipeline
 from .output_log import log_detection
+from .tracking import CentroidTracker, bbox_centroid
 
 
 def parse_args() -> argparse.Namespace:
-    """Parse --source, --benchmark, and --duration (benchmark auto-stop, seconds)."""
+    """Parse --source, --benchmark, --duration, and the --line-* counting line options."""
     parser = argparse.ArgumentParser(description="Run the RetailVision inference pipeline")
     parser.add_argument(
         "--source",
@@ -43,6 +47,24 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=15.0,
         help="Benchmark mode only: seconds to run before stopping automatically (default: 15)",
+    )
+    parser.add_argument(
+        "--line-axis",
+        choices=["x", "y"],
+        default="x",
+        help="Axis the virtual counting line spans perpendicular to: 'x' for a vertical line, 'y' for a horizontal one (default: x)",
+    )
+    parser.add_argument(
+        "--line-position",
+        type=float,
+        default=None,
+        help="Pixel coordinate of the counting line along --line-axis (default: middle of the frame)",
+    )
+    parser.add_argument(
+        "--line-direction",
+        choices=["increasing", "decreasing"],
+        default="increasing",
+        help="Crossing direction counted as an entry: 'increasing' (e.g. left-to-right) or 'decreasing' (default: increasing)",
     )
     return parser.parse_args()
 
@@ -64,6 +86,16 @@ def draw_detections(frame, detections: list[dict]) -> None:
         cv2.putText(frame, line2, (x, y - 6), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 200, 255), 2)
 
 
+def draw_counter(frame, counter: LineCounter, width: int, height: int) -> None:
+    """Draw the virtual counting line and the current occupancy count onto the frame."""
+    position = int(counter.position)
+    if counter.axis == "x":
+        cv2.line(frame, (position, 0), (position, height), (255, 0, 0), 2)
+    else:
+        cv2.line(frame, (0, position), (width, position), (255, 0, 0), 2)
+    cv2.putText(frame, f"Occupancy: {counter.count}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
+
+
 def main() -> None:
     """Run the inference pipeline over a camera or video source until 'q', EOF, or --duration elapses."""
     args = parse_args()
@@ -74,8 +106,15 @@ def main() -> None:
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
+    line_position = args.line_position
+    if line_position is None:
+        line_position = width / 2 if args.line_axis == "x" else height / 2
+
     pipeline = InferencePipeline()
+    tracker = CentroidTracker()
+    counter = LineCounter(axis=args.line_axis, position=line_position, entry_direction=args.line_direction)
     print(f"Source opened at {width}x{height} on device: {pipeline.device}.")
+    print(f"Counting line: {args.line_axis}={line_position:.0f}, entry direction: {args.line_direction}.")
     if args.benchmark:
         print(f"Benchmark mode: running for up to {args.duration:.0f}s (Ctrl+C also stops cleanly).")
     else:
@@ -97,8 +136,16 @@ def main() -> None:
 
             detections = pipeline.process_frame(frame)
             total_faces += len(detections)
-            for det in detections:
-                log_detection(det)
+
+            bboxes = [det["bbox"] for det in detections]
+            track_ids = tracker.update(bboxes)
+            timestamp = time.time()
+            tracks = {track_id: bbox_centroid(bbox) for track_id, bbox in zip(track_ids, bboxes)}
+            for track_id, event in counter.update(tracks, timestamp):
+                print(f"  Track {track_id} {event} -- occupancy now {counter.count}")
+
+            for det, track_id in zip(detections, track_ids):
+                log_detection(det, count=counter.count, dwell_seconds=counter.dwell_seconds(track_id, timestamp))
 
             if args.benchmark:
                 now = time.perf_counter()
@@ -108,6 +155,7 @@ def main() -> None:
                     last_report = now
             else:
                 draw_detections(frame, detections)
+                draw_counter(frame, counter, width, height)
                 cv2.imshow("RetailVision - inference pipeline", frame)
                 if cv2.waitKey(1) & 0xFF == ord("q"):
                     break

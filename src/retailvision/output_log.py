@@ -9,11 +9,13 @@ log. Records are newline-delimited JSON (one JSON object per line) rather
 than a single JSON array, since the array form would require rewriting the
 entire file on every append.
 
-zone_id, count, dwell_seconds, and engagement_score are part of the
-schema but not yet computable: they depend on the zone configuration and
-people-counting/zone-emotion modules (a later epic), so they're logged as
-null placeholders for now. The schema is frozen at these 8 fields so that
-epic can populate real values without changing the log's shape.
+zone_id and engagement_score are not yet computable -- they depend on the
+zone configuration and zone-emotion correlation modules -- so they're
+still logged as null placeholders. count and dwell_seconds are populated
+once a LineCounter is supplied: count is net occupancy at the moment of
+the detection event, dwell_seconds is how long the detected track has
+currently been present. The schema is frozen at these 8 fields so later
+modules can populate the remaining ones without changing the log's shape.
 """
 
 import json
@@ -35,23 +37,34 @@ SCHEMA_FIELDS = (
 )
 
 
-def build_log_record(detection: dict, timestamp: str | None = None) -> dict:
+def build_log_record(
+    detection: dict,
+    timestamp: str | None = None,
+    count: int | None = None,
+    dwell_seconds: float | None = None,
+) -> dict:
     """Build one schema-conforming, anonymized log record from a process_frame() detection."""
     return {
         "timestamp": timestamp or datetime.now(timezone.utc).isoformat(),
         "zone_id": None,
-        "count": None,
+        "count": count,
         "age_group": detection["age_group"],
         "gender": detection["gender"],
         "emotion": detection["emotion"],
-        "dwell_seconds": None,
+        "dwell_seconds": dwell_seconds,
         "engagement_score": None,
     }
 
 
-def log_detection(detection: dict, log_path: Path = DEFAULT_LOG_PATH, timestamp: str | None = None) -> None:
+def log_detection(
+    detection: dict,
+    log_path: Path = DEFAULT_LOG_PATH,
+    timestamp: str | None = None,
+    count: int | None = None,
+    dwell_seconds: float | None = None,
+) -> None:
     """Append one anonymized log record for a single detection event to log_path."""
-    record = build_log_record(detection, timestamp=timestamp)
+    record = build_log_record(detection, timestamp=timestamp, count=count, dwell_seconds=dwell_seconds)
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with open(log_path, "a") as f:
         f.write(json.dumps(record) + "\n")
