@@ -43,7 +43,7 @@ PYTHONPATH=. ./venv/bin/python3 -m unittest discover -s tests -v  # run the test
 
 ## Server
 
-A separate FastAPI + TimescaleDB service (`server/`, its own venv/dependencies) receives anonymized records shipped by camera nodes and persists them for multi-node deployments. See `docs/server.md` for the full setup, schema, and API details.
+A separate FastAPI + TimescaleDB service (`server/`, its own venv/dependencies) receives anonymized records shipped by camera nodes, persists them, and serves recent-detections/live-occupancy/time-windowed-aggregate endpoints for the dashboard. See `docs/server.md` for the full setup, schema, and API details.
 
 ```
 cp .env.example .env && docker compose up -d timescaledb       # TimescaleDB on localhost:5433 (not 5432, avoids clashing with a local Postgres)
