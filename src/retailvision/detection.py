@@ -3,33 +3,26 @@ detection.py
 
 Handles face detection for the RetailVision pipeline. This is the first
 detection stage: it takes a single camera frame and returns the bounding
-boxes of any faces found in it, using a YOLOv8 detection-mode model
-trained from scratch on WIDER FACE and fine-tuned for retail camera
-conditions (see docs/models/widerface_baseline.md and
-docs/models/widerface_finetune.md for training details, and
-docs/model_evaluation.md for the real-world evaluation that motivated
-replacing this stage's original Haar cascade implementation).
+boxes of any faces found in it, using OpenCV's bundled Haar cascade
+classifier (no extra model downloads required).
 """
 
-from pathlib import Path
-
+import cv2
 import numpy as np
-from ultralytics import YOLO
-
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-WEIGHTS_PATH = REPO_ROOT / "models" / "face_detection" / "final.pt"
 
 
 class FaceDetector:
-    def __init__(self, device: str | None = None) -> None:
-        """Load the fine-tuned YOLOv8 face-detection checkpoint onto the given device."""
-        self._model = YOLO(str(WEIGHTS_PATH))
-        self._device = device
+    def __init__(self) -> None:
+        """Load the Haar cascade classifier used to detect faces."""
+        cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+        self._classifier = cv2.CascadeClassifier(cascade_path)
+        if self._classifier.empty():
+            raise RuntimeError(f"Could not load cascade classifier from {cascade_path}")
 
     def detect(self, frame: np.ndarray) -> list[tuple[int, int, int, int]]:
         """Detect faces in a BGR frame, returning (x, y, w, h) boxes."""
-        result = self._model.predict(source=frame, device=self._device, verbose=False)[0]
-        boxes = []
-        for x1, y1, x2, y2 in result.boxes.xyxy.tolist():
-            boxes.append((int(x1), int(y1), int(x2 - x1), int(y2 - y1)))
-        return boxes
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        faces = self._classifier.detectMultiScale(
+            gray, scaleFactor=1.1, minNeighbors=5, minSize=(60, 60)
+        )
+        return [tuple(box) for box in faces]

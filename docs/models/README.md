@@ -105,9 +105,6 @@ and the Haar cascade's loose live bounding boxes — not yet fixed.
 
 **Finding 3**: face detection itself fails past ~45° yaw (52.4% detection
 rate) — a known, expected Haar-cascade limitation, not a classifier issue.
-(Since resolved — `FaceDetector` now runs a fine-tuned YOLOv8 model
-instead of Haar cascade; see `docs/model_evaluation.md`'s face-detector
-section.)
 
 → Full doc: [`docs/model_evaluation.md`](../model_evaluation.md)
 
