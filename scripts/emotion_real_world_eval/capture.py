@@ -2,8 +2,8 @@
 capture.py
 
 Live camera capture loop for one (condition, emotion) session: detects
-faces with the existing FaceDetector, classifies each with the
-fine-tuned emotion model, draws the prediction (green if it matches
+faces with the existing Haar cascade FaceDetector, classifies each with
+the fine-tuned emotion model, draws the prediction (green if it matches
 the supplied ground truth emotion, red if not) on the preview window, and
 logs one row per frame to a CSV for later aggregation.
 """

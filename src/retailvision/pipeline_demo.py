@@ -1,159 +1,43 @@
 """
 pipeline_demo.py
 
-End-to-end demo of the RetailVision pipeline: opens a camera or a
-pre-recorded video file, runs each frame through InferencePipeline (face
-detection plus age/gender/emotion classification), shows a live preview
-with each detected person's bounding box and predictions drawn, and
-appends an anonymized log record for each detection (see output_log.py).
-Optionally also ships the same records to a central server in real time
-(see remote_log.py), for deployments running more than one camera node --
-this is a second, independent sink alongside the local log file, not a
-replacement for it.
-Supports a headless --benchmark mode (no display) to measure sustained
-FPS, since imshow overhead would otherwise skew the number -- benchmark
-mode has no window to capture a 'q' keypress, so it stops automatically
-after --duration seconds (or when the source runs out, for a video file)
-rather than waiting on unreachable input. Per the project's testing
-convention, point --source at a pre-recorded video file first -- a
-deterministic input makes debugging far easier than a live camera feed --
-before testing against the live camera.
+First end-to-end demo of the RetailVision pipeline: opens the laptop's
+default camera, runs each frame through the FaceDetector, and shows a
+live preview with bounding boxes drawn around detected faces. This is
+the starting point that later stages (demographics, emotion, tracking,
+zone scoring) will be added onto.
 """
-
-import argparse
-import time
 
 import cv2
 
-from .inference import InferencePipeline
-from .output_log import log_detection
-from .remote_log import RemoteLogShipper
-
-
-def parse_args() -> argparse.Namespace:
-    """Parse --source, --benchmark, --duration, and the optional --server-url/--camera-node-id/--api-key trio."""
-    parser = argparse.ArgumentParser(description="Run the RetailVision inference pipeline")
-    parser.add_argument(
-        "--source",
-        default="0",
-        help="Camera index (e.g. 0) or path to a video file (default: 0)",
-    )
-    parser.add_argument(
-        "--benchmark",
-        action="store_true",
-        help="Run headless (no preview window) and report average FPS on exit",
-    )
-    parser.add_argument(
-        "--duration",
-        type=float,
-        default=15.0,
-        help="Benchmark mode only: seconds to run before stopping automatically (default: 15)",
-    )
-    parser.add_argument(
-        "--server-url",
-        default=None,
-        help="Central server base URL to also ship anonymized records to (e.g. http://localhost:8000). "
-        "Omit to log locally only.",
-    )
-    parser.add_argument(
-        "--camera-node-id",
-        default=None,
-        help="This machine's identifier, sent alongside shipped records. Required if --server-url is set.",
-    )
-    parser.add_argument(
-        "--api-key",
-        default=None,
-        help="API key for the central server. Required if --server-url is set.",
-    )
-    args = parser.parse_args()
-    if args.server_url and not (args.camera_node_id and args.api_key):
-        parser.error("--server-url requires both --camera-node-id and --api-key")
-    return args
-
-
-def open_source(source: str) -> cv2.VideoCapture:
-    """Open a camera by index or a video file by path."""
-    return cv2.VideoCapture(int(source) if source.isdigit() else source)
-
-
-def draw_detections(frame, detections: list[dict]) -> None:
-    """Draw each detected person's bounding box and predictions onto the frame."""
-    for det in detections:
-        x, y, w, h = det["bbox"]
-        conf = det["confidence"]
-        cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-        line1 = f"{det['age_group']} ({conf['age']:.2f}) / {det['gender']} ({conf['gender']:.2f})"
-        line2 = f"{det['emotion']} ({conf['emotion']:.2f})"
-        cv2.putText(frame, line1, (x, y - 26), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-        cv2.putText(frame, line2, (x, y - 6), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 200, 255), 2)
+from .detection import FaceDetector
 
 
 def main() -> None:
-    """Run the inference pipeline over a camera or video source until 'q', EOF, or --duration elapses."""
-    args = parse_args()
-    cap = open_source(args.source)
+    """Open the camera and run the live face-detection preview loop."""
+    cap = cv2.VideoCapture(0)
     if not cap.isOpened():
-        raise RuntimeError(f"Could not open source: {args.source}")
+        raise RuntimeError("Could not open camera at index 0")
 
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    detector = FaceDetector()
 
-    pipeline = InferencePipeline()
-    shipper = None
-    if args.server_url:
-        shipper = RemoteLogShipper(args.server_url, args.camera_node_id, args.api_key)
-        print(f"Shipping records to {args.server_url} as camera node '{args.camera_node_id}'.")
-
-    print(f"Source opened at {width}x{height} on device: {pipeline.device}.")
-    if args.benchmark:
-        print(f"Benchmark mode: running for up to {args.duration:.0f}s (Ctrl+C also stops cleanly).")
-    else:
-        print("Press 'q' to quit.")
-
-    frame_count = 0
-    total_faces = 0
-    start = time.perf_counter()
-    last_report = start
+    print("Camera opened. Press 'q' to quit.")
     try:
         while True:
-            if args.benchmark and (time.perf_counter() - start) >= args.duration:
-                break
-
             ok, frame = cap.read()
             if not ok:
+                print("Failed to read frame")
                 break
-            frame_count += 1
 
-            detections = pipeline.process_frame(frame)
-            total_faces += len(detections)
-            for det in detections:
-                log_detection(det)
-                if shipper is not None:
-                    shipper.ship(det)
+            for x, y, w, h in detector.detect(frame):
+                cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
-            if args.benchmark:
-                now = time.perf_counter()
-                if now - last_report >= 2.0:
-                    running_fps = frame_count / (now - start)
-                    print(f"  {frame_count} frames, {running_fps:.2f} FPS running avg, {len(detections)} faces this frame")
-                    last_report = now
-            else:
-                draw_detections(frame, detections)
-                cv2.imshow("RetailVision - inference pipeline", frame)
-                if cv2.waitKey(1) & 0xFF == ord("q"):
-                    break
+            cv2.imshow("RetailVision - face detection", frame)
+            if cv2.waitKey(1) & 0xFF == ord("q"):
+                break
     finally:
-        elapsed = time.perf_counter() - start
         cap.release()
         cv2.destroyAllWindows()
-        if shipper is not None:
-            shipper.close()
-        if frame_count:
-            avg_faces = total_faces / frame_count
-            print(
-                f"Processed {frame_count} frames in {elapsed:.1f}s "
-                f"({frame_count / elapsed:.2f} FPS, avg {avg_faces:.2f} faces/frame)"
-            )
 
 
 if __name__ == "__main__":

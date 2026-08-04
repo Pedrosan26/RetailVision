@@ -20,10 +20,10 @@ listed in full in `data/utkface/processed/distribution_report.json`
 ## Format decision: classification, not detection
 
 UTKFace images are already single pre-cropped face chips. Face *localization*
-is handled by an earlier, separate pipeline stage (`FaceDetector`). So
-age/gender here is a classification problem — given a face crop, predict
-its class — not a detection problem, and there's no meaningful bounding
-box to draw beyond "the whole image." The dataset is laid out as a
+is handled by an earlier, separate pipeline stage (`FaceDetector`, currently
+Haar cascade). So age/gender here is a classification problem — given a face
+crop, predict its class — not a detection problem, and there's no meaningful
+bounding box to draw beyond "the whole image." The dataset is laid out as a
 YOLOv8 classification dataset (`yolov8n-cls`-compatible): folder-per-class,
 no `.txt` annotation files.
 
@@ -113,7 +113,8 @@ Recommended settings for the `yolov8n-cls` training run:
   without distorting features enough to look like a different age.
 - **Mild translate/scale jitter (`translate≈0.1`, `scale≈0.2`)**: robustness
   to the upstream face detector's crop not being pixel-perfect — in
-  production, boxes come from `FaceDetector`, not a hand-labeled dataset.
+  production, boxes come from Haar cascade / a future YOLO face detector,
+  not a hand-labeled dataset.
 - **Conservative HSV jitter (`hsv_h≈0.01`, `hsv_s≈0.3`, `hsv_v≈0.2`)**:
   robustness to in-store lighting variation. Kept mild deliberately — skin
   tone is a real signal correlated with the race imbalance above, and
