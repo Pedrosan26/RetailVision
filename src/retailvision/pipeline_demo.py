@@ -8,6 +8,10 @@ face across frames and counts virtual-line crossings (see tracking.py,
 counter.py), shows a live preview with each detected person's bounding
 box, predictions, the counting line, and the running occupancy drawn, and
 appends an anonymized log record for each detection (see output_log.py).
+Optionally also ships the same records to a central server in real time
+(see remote_log.py), for deployments running more than one camera node --
+this is a second, independent sink alongside the local log file, not a
+replacement for it.
 Supports a headless --benchmark mode (no display) to measure sustained
 FPS, since imshow overhead would otherwise skew the number -- benchmark
 mode has no window to capture a 'q' keypress, so it stops automatically
@@ -26,11 +30,12 @@ import cv2
 from .counter import LineCounter
 from .inference import InferencePipeline
 from .output_log import log_detection
+from .remote_log import RemoteLogShipper
 from .tracking import CentroidTracker, bbox_centroid
 
 
 def parse_args() -> argparse.Namespace:
-    """Parse --source, --benchmark, --duration, and the --line-* counting line options."""
+    """Parse --source, --benchmark, --duration, the --line-* counting line options, and the optional --server-url/--camera-node-id/--api-key trio."""
     parser = argparse.ArgumentParser(description="Run the RetailVision inference pipeline")
     parser.add_argument(
         "--source",
@@ -66,7 +71,26 @@ def parse_args() -> argparse.Namespace:
         default="increasing",
         help="Crossing direction counted as an entry: 'increasing' (e.g. left-to-right) or 'decreasing' (default: increasing)",
     )
-    return parser.parse_args()
+    parser.add_argument(
+        "--server-url",
+        default=None,
+        help="Central server base URL to also ship anonymized records to (e.g. http://localhost:8000). "
+        "Omit to log locally only.",
+    )
+    parser.add_argument(
+        "--camera-node-id",
+        default=None,
+        help="This machine's identifier, sent alongside shipped records. Required if --server-url is set.",
+    )
+    parser.add_argument(
+        "--api-key",
+        default=None,
+        help="API key for the central server. Required if --server-url is set.",
+    )
+    args = parser.parse_args()
+    if args.server_url and not (args.camera_node_id and args.api_key):
+        parser.error("--server-url requires both --camera-node-id and --api-key")
+    return args
 
 
 def open_source(source: str) -> cv2.VideoCapture:
@@ -113,6 +137,11 @@ def main() -> None:
     pipeline = InferencePipeline()
     tracker = CentroidTracker()
     counter = LineCounter(axis=args.line_axis, position=line_position, entry_direction=args.line_direction)
+    shipper = None
+    if args.server_url:
+        shipper = RemoteLogShipper(args.server_url, args.camera_node_id, args.api_key)
+        print(f"Shipping records to {args.server_url} as camera node '{args.camera_node_id}'.")
+
     print(f"Source opened at {width}x{height} on device: {pipeline.device}.")
     print(f"Counting line: {args.line_axis}={line_position:.0f}, entry direction: {args.line_direction}.")
     if args.benchmark:
@@ -145,7 +174,10 @@ def main() -> None:
                 print(f"  Track {track_id} {event} -- occupancy now {counter.count}")
 
             for det, track_id in zip(detections, track_ids):
-                log_detection(det, count=counter.count, dwell_seconds=counter.dwell_seconds(track_id, timestamp))
+                dwell = counter.dwell_seconds(track_id, timestamp)
+                log_detection(det, count=counter.count, dwell_seconds=dwell)
+                if shipper is not None:
+                    shipper.ship(det, count=counter.count, dwell_seconds=dwell)
 
             if args.benchmark:
                 now = time.perf_counter()
@@ -163,6 +195,8 @@ def main() -> None:
         elapsed = time.perf_counter() - start
         cap.release()
         cv2.destroyAllWindows()
+        if shipper is not None:
+            shipper.close()
         if frame_count:
             avg_faces = total_faces / frame_count
             print(
