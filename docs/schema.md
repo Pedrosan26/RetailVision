@@ -19,38 +19,42 @@ originating ticket), each line should be parsed independently.
 | Field | Type | Description |
 |---|---|---|
 | `timestamp` | string | ISO 8601 UTC timestamp of the detection event. |
-| `zone_id` | string \| null | ID of the store zone the person was detected in. `null` until zone configuration (RV-014) lands. |
-| `count` | integer \| null | Person count for the zone at this point. `null` until the people-counting module (RV-013) lands. |
+| `zone_id` | string \| null | ID of the store zone the person was detected in. `null` until zone configuration lands. |
+| `count` | integer \| null | Net occupancy (entries minus exits so far) at the moment of the detection event, from `LineCounter`. `null` if no counter was supplied. |
 | `age_group` | string | Predicted age bracket, one of the age classifier's classes (see `docs/datasets/utkface.md`). |
 | `gender` | string | Predicted gender, one of the gender classifier's classes. |
 | `emotion` | string | Predicted emotion, one of the emotion classifier's classes. |
-| `dwell_seconds` | number \| null | Seconds the person has dwelled in the zone. `null` until the zone-emotion correlation module (RV-013/RV-015) lands. |
-| `engagement_score` | number \| null | Normalized 0-100 engagement score for the zone/time window. `null` until RV-015 lands. |
+| `dwell_seconds` | number \| null | Seconds the detected person's track has been present since its entry event. `null` if the track hasn't registered an entry yet, or no counter was supplied. |
+| `engagement_score` | number \| null | Normalized 0-100 engagement score for the zone/time window. `null` until the zone-emotion correlation module lands. |
 
-This 8-field shape is frozen: `zone_id`, `count`, `dwell_seconds`, and
-`engagement_score` are included now as `null` placeholders specifically so
-that later epics can populate real values without changing the schema
-downstream components (e.g. the dashboard) are built against.
+This 8-field shape is frozen: fields not yet computable are included now as
+`null` placeholders specifically so that later modules can populate real
+values without changing the schema downstream components (e.g. the
+dashboard) are built against.
 
 ## Example records
 
 ```json
-{"timestamp": "2026-07-31T10:15:32.101+00:00", "zone_id": null, "count": null, "age_group": "18-40", "gender": "Male", "emotion": "Neutral", "dwell_seconds": null, "engagement_score": null}
-{"timestamp": "2026-07-31T10:15:32.340+00:00", "zone_id": null, "count": null, "age_group": "6-12", "gender": "Female", "emotion": "Happy", "dwell_seconds": null, "engagement_score": null}
+{"timestamp": "2026-07-31T10:15:32.101+00:00", "zone_id": null, "count": 3, "age_group": "18-40", "gender": "Male", "emotion": "Neutral", "dwell_seconds": 12.4, "engagement_score": null}
+{"timestamp": "2026-07-31T10:15:32.340+00:00", "zone_id": null, "count": 3, "age_group": "6-12", "gender": "Female", "emotion": "Happy", "dwell_seconds": null, "engagement_score": null}
 ```
 
 ## Known limitations
 
 - **No person or track identifier.** A record represents one anonymous
-  detection event, not a person. If multiple people are detected in the
-  same frame, their records are indistinguishable beyond their independent
-  `age_group`/`gender`/`emotion` values and near-identical timestamps --
-  there is currently no field marking which records came from the same
-  frame, let alone which records across frames belong to the same person.
-  Resolving this requires multi-object tracking (planned: ByteTrack, see
-  RET-16 under EP-5), which is what `dwell_seconds` and a real
-  `engagement_score` also depend on. Deliberately out of scope here rather
-  than guessed at ahead of that epic's design.
+  detection event, not a person -- the internal track ID used to compute
+  `dwell_seconds` is never persisted to the log. If multiple people are
+  detected in the same frame, their records are indistinguishable beyond
+  their independent `age_group`/`gender`/`emotion` values and
+  near-identical timestamps. This is deliberate: exposing a persistent
+  per-person identifier in an anonymized log would undercut the privacy
+  goal it exists for.
+- **`dwell_seconds` reflects a single virtual line, not a zone boundary.**
+  A track that leaves the frame without recrossing the counting line is
+  never marked as exited, so its last logged `dwell_seconds` before
+  disappearing understates nothing but also never resolves to a final
+  value. See `docs/people_counter.md` for the full counting methodology
+  and its limitations.
 
 ## What is deliberately excluded
 
