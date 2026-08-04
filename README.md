@@ -53,6 +53,16 @@ cp .env.example .env && ./venv/bin/alembic upgrade head        # creates the det
 ./venv/bin/python3 -m pytest tests/ -v                          # run the server's test suite
 ```
 
+## Dashboard
+
+A React + TypeScript dashboard (`retailVision/`, its own `package.json`) reads the server's endpoints and shows live occupancy and recent detections, with per-zone views planned once zone config lands. See `docs/dashboard.md` for the full stack/layout details.
+
+```
+cd retailVision && nvm use && npm install    # requires Node 22, see docs/dashboard.md
+cp .env.example .env                          # VITE_API_BASE_URL, defaults to http://localhost:8000
+npm run dev                                    # http://localhost:5173, requires the server running
+```
+
 ## Dataset preparation
 
 Datasets live under gitignored `data/<dataset>/raw/` (original downloads) and `data/<dataset>/processed/` (prepared, training-ready layout + a `distribution_report.json`). Human-readable documentation of sourcing, format decisions, and class distributions is tracked in `docs/datasets/`.
