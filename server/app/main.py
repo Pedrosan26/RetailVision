@@ -1,0 +1,32 @@
+"""
+main.py
+
+FastAPI application entry point: wires up CORS and the API routers.
+"""
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from .config import get_settings
+from .routers import aggregates, detections, ingest, occupancy
+
+app = FastAPI(title="RetailVision server")
+
+_settings = get_settings()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_settings.cors_origin_list(),
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(ingest.router)
+app.include_router(detections.router)
+app.include_router(occupancy.router)
+app.include_router(aggregates.router)
+
+
+@app.get("/health")
+async def health() -> dict[str, str]:
+    """Basic liveness check."""
+    return {"status": "ok"}

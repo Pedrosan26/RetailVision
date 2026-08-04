@@ -1,0 +1,15 @@
+fastapi
+uvicorn[standard]
+sqlalchemy[asyncio]
+asyncpg
+alembic
+pydantic-settings
+pytest
+pytest-asyncio
+httpx
+# aiosqlite: test-only -- backs an in-memory SQLite DB for endpoint tests
+# so they don't require a running Postgres/TimescaleDB instance. Real
+# deployment always uses Postgres via asyncpg; SQLite here validates the
+# app/ORM logic, not TimescaleDB-specific behavior (that's exercised by
+# actually applying the Alembic migration against real TimescaleDB).
+aiosqlite
