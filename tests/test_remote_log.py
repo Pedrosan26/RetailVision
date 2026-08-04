@@ -106,6 +106,18 @@ class TestRemoteLogShipper(unittest.TestCase):
             self.assertNotIn("confidence", record)
             self.assertEqual(call_kwargs["headers"]["X-API-Key"], "test-key")
 
+    def test_ship_forwards_count_and_dwell_seconds(self) -> None:
+        """count and dwell_seconds passed to ship() land in the shipped record, not just the local log."""
+        with patch("src.retailvision.remote_log.requests.post") as mock_post:
+            mock_post.return_value = MagicMock(status_code=202)
+            shipper = self._make_shipper(batch_size=1)
+            shipper.ship(SAMPLE_DETECTION, count=4, dwell_seconds=12.5)
+            shipper.close()
+
+            record = mock_post.call_args.kwargs["json"]["records"][0]
+            self.assertEqual(record["count"], 4)
+            self.assertEqual(record["dwell_seconds"], 12.5)
+
     def test_send_failure_does_not_raise(self) -> None:
         """A network failure while shipping is caught and warned about, never propagated to the caller."""
         with patch("src.retailvision.remote_log.requests.post") as mock_post:
