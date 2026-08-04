@@ -47,9 +47,15 @@ class RemoteLogShipper:
         self._last_flush = time.monotonic()
         self._executor = ThreadPoolExecutor(max_workers=1)
 
-    def ship(self, detection: dict, timestamp: str | None = None) -> None:
+    def ship(
+        self,
+        detection: dict,
+        timestamp: str | None = None,
+        count: int | None = None,
+        dwell_seconds: float | None = None,
+    ) -> None:
         """Build a schema-conforming record, buffer it, and flush once the batch size or flush interval is reached."""
-        record = build_log_record(detection, timestamp=timestamp)
+        record = build_log_record(detection, timestamp=timestamp, count=count, dwell_seconds=dwell_seconds)
         self._buffer.append(record)
 
         elapsed = time.monotonic() - self._last_flush
