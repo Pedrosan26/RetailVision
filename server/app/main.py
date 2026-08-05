@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
-from .routers import aggregates, detections, ingest, occupancy
+from .routers import aggregates, detections, frames, ingest, occupancy
 
 app = FastAPI(title="RetailVision server")
 
@@ -24,6 +24,7 @@ app.include_router(ingest.router)
 app.include_router(detections.router)
 app.include_router(occupancy.router)
 app.include_router(aggregates.router)
+app.include_router(frames.router)
 
 
 @app.get("/health")

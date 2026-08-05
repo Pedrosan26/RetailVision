@@ -12,6 +12,12 @@ Optionally also ships the same records to a central server in real time
 (see remote_log.py), for deployments running more than one camera node --
 this is a second, independent sink alongside the local log file, not a
 replacement for it.
+Optionally also streams the current annotated frame to the same server
+(see frame_stream.py) so it can be viewed live in the dashboard -- a
+deliberate, temporary trade-off against this project's edge-inference
+privacy design (frames are otherwise never transmitted anywhere), opt-in
+via --stream-frames and independent of the anonymized record shipping
+above.
 Supports a headless --benchmark mode (no display) to measure sustained
 FPS, since imshow overhead would otherwise skew the number -- benchmark
 mode has no window to capture a 'q' keypress, so it stops automatically
@@ -28,6 +34,7 @@ import time
 import cv2
 
 from .counter import LineCounter
+from .frame_stream import FrameStreamer
 from .inference import InferencePipeline
 from .output_log import log_detection
 from .remote_log import RemoteLogShipper
@@ -35,7 +42,7 @@ from .tracking import CentroidTracker, bbox_centroid
 
 
 def parse_args() -> argparse.Namespace:
-    """Parse --source, --benchmark, --duration, the --line-* counting line options, and the optional --server-url/--camera-node-id/--api-key trio."""
+    """Parse --source, --benchmark, --duration, the --line-* counting line options, the optional --server-url/--camera-node-id/--api-key trio, and --stream-frames."""
     parser = argparse.ArgumentParser(description="Run the RetailVision inference pipeline")
     parser.add_argument(
         "--source",
@@ -87,9 +94,17 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="API key for the central server. Required if --server-url is set.",
     )
+    parser.add_argument(
+        "--stream-frames",
+        action="store_true",
+        help="Also stream the current annotated frame to the server for live viewing in the dashboard. "
+        "Requires --server-url. Off by default -- see the module docstring for the privacy trade-off.",
+    )
     args = parser.parse_args()
     if args.server_url and not (args.camera_node_id and args.api_key):
         parser.error("--server-url requires both --camera-node-id and --api-key")
+    if args.stream_frames and not args.server_url:
+        parser.error("--stream-frames requires --server-url")
     return args
 
 
@@ -142,6 +157,11 @@ def main() -> None:
         shipper = RemoteLogShipper(args.server_url, args.camera_node_id, args.api_key)
         print(f"Shipping records to {args.server_url} as camera node '{args.camera_node_id}'.")
 
+    streamer = None
+    if args.stream_frames:
+        streamer = FrameStreamer(args.server_url, args.camera_node_id, args.api_key)
+        print(f"Streaming live frames to {args.server_url} as camera node '{args.camera_node_id}'.")
+
     print(f"Source opened at {width}x{height} on device: {pipeline.device}.")
     print(f"Counting line: {args.line_axis}={line_position:.0f}, entry direction: {args.line_direction}.")
     if args.benchmark:
@@ -179,6 +199,13 @@ def main() -> None:
                 if shipper is not None:
                     shipper.ship(det, count=counter.count, dwell_seconds=dwell)
 
+            if not args.benchmark or streamer is not None:
+                draw_detections(frame, detections)
+                draw_counter(frame, counter, width, height)
+
+            if streamer is not None:
+                streamer.send(frame)
+
             if args.benchmark:
                 now = time.perf_counter()
                 if now - last_report >= 2.0:
@@ -186,8 +213,6 @@ def main() -> None:
                     print(f"  {frame_count} frames, {running_fps:.2f} FPS running avg, {len(detections)} faces this frame")
                     last_report = now
             else:
-                draw_detections(frame, detections)
-                draw_counter(frame, counter, width, height)
                 cv2.imshow("RetailVision - inference pipeline", frame)
                 if cv2.waitKey(1) & 0xFF == ord("q"):
                     break
@@ -197,6 +222,8 @@ def main() -> None:
         cv2.destroyAllWindows()
         if shipper is not None:
             shipper.close()
+        if streamer is not None:
+            streamer.close()
         if frame_count:
             avg_faces = total_faces / frame_count
             print(
