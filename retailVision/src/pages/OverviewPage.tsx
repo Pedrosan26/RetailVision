@@ -1,10 +1,11 @@
 // Landing page: live occupancy across all camera nodes/zones, plus a
 // recent-activity feed.
 
+import { CameraFeedGrid } from "../components/cameras/CameraFeedGrid";
 import { RecentActivityFeed } from "../components/detections/RecentActivityFeed";
 import { OccupancyGrid } from "../components/occupancy/OccupancyGrid";
 
-/** Renders the Overview page: live occupancy grid and recent activity feed. */
+/** Renders the Overview page: live camera feeds, occupancy grid, and recent activity feed. */
 export function OverviewPage() {
   return (
     <div className="flex flex-col gap-8">
@@ -14,6 +15,13 @@ export function OverviewPage() {
           Live occupancy and recent detections across all camera nodes.
         </p>
       </div>
+
+      <section>
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          Live camera feeds
+        </h2>
+        <CameraFeedGrid />
+      </section>
 
       <section>
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
