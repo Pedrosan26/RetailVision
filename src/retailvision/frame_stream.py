@@ -11,7 +11,12 @@ privacy design, not a new permanent sink. Throttled to min_interval
 regardless of capture frame rate, since sending every frame would swamp
 the network for no visual benefit at typical browser refresh rates.
 Runs on a background thread, same pattern as RemoteLogShipper, so a
-slow or unreachable server never stalls frame capture.
+slow or unreachable server never stalls frame capture. min_interval
+defaults low (0.3s) since this only bounds how often a frame leaves this
+process -- the server re-serves whatever's latest at a steady rate to
+each dashboard viewer regardless (see frames.py's /stream endpoint), so
+this value mostly just trades local network bandwidth for freshness on a
+trusted LAN, not viewer-side smoothness.
 """
 
 import time
@@ -29,7 +34,7 @@ class FrameStreamer:
         server_url: str,
         camera_node_id: str,
         api_key: str,
-        min_interval: float = 1.0,
+        min_interval: float = 0.3,
         request_timeout: float = 3.0,
     ) -> None:
         """Configure the target server, this node's identity, and the send-rate throttle."""
