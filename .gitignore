@@ -221,3 +221,13 @@ __marimo__/
 data/
 *.pt
 *.onnx
+
+# Printable ArUco markers (regenerate via scripts/generate_aruco_markers.py)
+markers/
+
+# Per-camera intrinsic calibration -- describes one physical camera, so it is
+# specific to the machine it was captured on (regenerate via scripts/calibrate_camera.py)
+calibration/
+
+# Live zone definitions; config/zones.example.json is the committed template
+config/zones.json
