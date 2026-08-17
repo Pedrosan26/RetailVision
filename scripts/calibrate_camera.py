@@ -20,6 +20,7 @@ SPACE captures a view, 'c' calibrates and saves, 'q' quits.
 """
 
 import argparse
+import time
 from pathlib import Path
 
 import cv2
@@ -34,7 +35,29 @@ DEFAULT_MIN_SAMPLES = 15
 # typical view, but never when it is already accurate in absolute terms.
 OUTLIER_RATIO = 3.0
 OUTLIER_FLOOR_PX = 1.0
+WINDOW_NAME = "Camera calibration"
+
+# Requesting a resolution makes the backend tear down and rebuild the capture
+# session, and on macOS the camera can take the better part of ten seconds to
+# deliver its first frame afterwards. Reading immediately looks exactly like a
+# dead or busy camera, so wait the restart out before concluding anything.
+WARMUP_TIMEOUT = 25.0
 MIN_VIEWS_AFTER_DROP = 8
+
+# A single dropped read is normal; a long unbroken run of them means the camera
+# has stopped delivering, usually because another process already holds it.
+MAX_CONSECUTIVE_READ_FAILURES = 30
+
+
+def wait_for_first_frame(capture: cv2.VideoCapture, timeout: float) -> bool:
+    """Block until the camera delivers a frame or the timeout expires, returning whether one arrived."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        ok, _ = capture.read()
+        if ok:
+            return True
+        time.sleep(0.1)
+    return False
 
 
 def parse_pattern(text: str) -> tuple[int, int]:
@@ -56,6 +79,12 @@ def parse_args() -> argparse.Namespace:
         help="Chessboard square size in meters; affects only reported scale, not the intrinsics (default: 0.025)",
     )
     parser.add_argument("--min-samples", type=int, default=DEFAULT_MIN_SAMPLES, help=f"Views required before calibrating (default: {DEFAULT_MIN_SAMPLES})")
+    # Focal length is measured in pixels, so a calibration only describes the
+    # camera at the resolution it was captured at. When several cameras have to
+    # share a USB bus and are therefore run below their native resolution, they
+    # must be calibrated at that same reduced resolution.
+    parser.add_argument("--width", type=int, default=None, help="Capture at this width -- must match the width the camera will be run at")
+    parser.add_argument("--height", type=int, default=None, help="Capture at this height -- must match the height the camera will be run at")
     return parser.parse_args()
 
 
@@ -67,16 +96,52 @@ def main() -> None:
     capture = cv2.VideoCapture(source)
     if not capture.isOpened():
         raise RuntimeError(f"Could not open camera at source: {args.source}")
+    if args.width is not None or args.height is not None:
+        if args.width is not None:
+            capture.set(cv2.CAP_PROP_FRAME_WIDTH, args.width)
+        if args.height is not None:
+            capture.set(cv2.CAP_PROP_FRAME_HEIGHT, args.height)
+        print(f"Waiting for camera {args.source} to restart at the requested resolution...")
+        if not wait_for_first_frame(capture, WARMUP_TIMEOUT):
+            capture.release()
+            raise SystemExit(
+                f"Camera {args.source} delivered no frame within {WARMUP_TIMEOUT:.0f}s of being set to "
+                f"{args.width}x{args.height}.\nIt may not support that resolution, or may be held by "
+                "another process (close any camera_check.py window)."
+            )
+    actual = (int(capture.get(cv2.CAP_PROP_FRAME_WIDTH)), int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT)))
+    if (args.width, args.height) != (None, None) and actual != (args.width, args.height):
+        print(f"Note: camera settled on {actual[0]}x{actual[1]}, not the requested {args.width}x{args.height}.")
+    print(f"Calibrating at {actual[0]}x{actual[1]} -- run this camera at the same resolution.")
 
     corner_sets: list = []
     image_size: tuple[int, int] | None = None
     print(f"Looking for a {pattern[0]}x{pattern[1]} inner-corner chessboard. SPACE captures, 'c' calibrates, 'q' quits.")
 
+    consecutive_failures = 0
+    camera_failed = False
+    quit_early = False
+    # Create the window before the first frame arrives, so a camera that is slow
+    # to start still gives visible feedback rather than an empty screen.
+    cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_AUTOSIZE)
     try:
         while True:
             ok, frame = capture.read()
             if not ok:
-                break
+                consecutive_failures += 1
+                if consecutive_failures >= MAX_CONSECUTIVE_READ_FAILURES:
+                    camera_failed = True
+                    break
+                # Keep pumping the GUI while reads are failing, so the window stays
+                # responsive and 'q' still works instead of the app looking hung.
+                waiting = np.full((240, 640, 3), 40, np.uint8)
+                cv2.putText(waiting, f"waiting for camera {args.source}...", (10, 130), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 165, 255), 2)
+                cv2.imshow(WINDOW_NAME, waiting)
+                if cv2.waitKey(30) & 0xFF == ord("q"):
+                    quit_early = True
+                    break
+                continue
+            consecutive_failures = 0
             image_size = (frame.shape[1], frame.shape[0])
 
             corners = find_chessboard_corners(frame, pattern)
@@ -97,11 +162,12 @@ def main() -> None:
                 (0, 255, 0) if ready else (0, 200, 255),
                 2,
             )
-            cv2.imshow("Camera calibration", display)
+            cv2.imshow(WINDOW_NAME, display)
 
             key = cv2.waitKey(1) & 0xFF
             if key == ord("q"):
-                return
+                quit_early = True
+                break
             if key == ord(" ") and corners is not None:
                 corner_sets.append(corners)
                 print(f"Captured view {len(corner_sets)}")
@@ -115,10 +181,21 @@ def main() -> None:
         capture.release()
         cv2.destroyAllWindows()
 
+    if camera_failed:
+        raise SystemExit(
+            f"Camera {args.source} stopped delivering frames after {len(corner_sets)} view(s).\n"
+            "Another process is probably holding it -- close any other camera_check.py or "
+            "pipeline window, then try again."
+        )
+    if quit_early:
+        raise SystemExit(f"Quit with {len(corner_sets)} view(s) captured; nothing was saved.")
+    if image_size is None:
+        raise SystemExit(
+            f"Camera {args.source} never delivered a frame. It may be in use by another process, "
+            "or unable to run at the requested resolution."
+        )
     if len(corner_sets) < args.min_samples:
         raise SystemExit(f"Only {len(corner_sets)} views captured, need at least {args.min_samples}")
-    if image_size is None:
-        raise SystemExit("No frames were read from the camera")
 
     calibration = calibrate(corner_sets, pattern, image_size, args.square_size)
     calibration, corner_sets = drop_outlier_views(calibration, corner_sets, pattern, image_size, args.square_size)
