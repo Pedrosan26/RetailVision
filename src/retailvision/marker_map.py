@@ -51,6 +51,32 @@ from .marker_pose import MarkerPose, MarkerPoseEstimator, invert_pose, marker_ob
 # person's floor footprint, which is what zone tests need.
 DEFAULT_HEAD_HEIGHT_METERS = 1.6
 
+# How the markers are physically mounted, which fixes two things: how the world
+# frame is oriented so that z points at the ceiling, and which of a marker's own
+# axes must point up -- the constraint used to resolve the two-fold pose
+# ambiguity of a lone square.
+#
+#   "floor"  markers lie flat, face up. Their normal (local z) is world up, and
+#            they are all coplanar.
+#   "wall"   markers are upright on walls. Their local y ("up" in the printed
+#            image) is world up. Markers on different walls face different
+#            directions and are NOT coplanar, so only the upright constraint is
+#            shared between them.
+FLOOR_MOUNTING = "floor"
+WALL_MOUNTING = "wall"
+
+# Which local axis of a marker points at the ceiling, per mounting.
+_UP_AXIS = {FLOOR_MOUNTING: 2, WALL_MOUNTING: 1}
+
+# Orientation given to the anchor marker so that world z ends up pointing up.
+# For floor mounting the marker frame already has z up, so no rotation is needed.
+# For wall mounting the marker's y is up and its normal points out of the wall,
+# so the frame is rotated to put y on world z.
+_ANCHOR_ROTATION = {
+    FLOOR_MOUNTING: np.eye(3),
+    WALL_MOUNTING: np.array([[1.0, 0.0, 0.0], [0.0, 0.0, -1.0], [0.0, 1.0, 0.0]]),
+}
+
 # Below this, a viewing ray runs so nearly parallel to the target plane that the
 # intersection point is numerically meaningless.
 _MIN_RAY_PLANE_ANGLE = 1e-6
@@ -73,10 +99,40 @@ _PLANARITY_TOLERANCE = 0.02
 class MarkerMap:
     """Holds every known marker's pose in one shared world frame, growing as cameras observe overlapping markers."""
 
-    def __init__(self, anchor_id: int | None = None) -> None:
-        """Optionally fix which marker defines the world origin; if unset, the first marker mapped becomes it."""
+    def __init__(
+        self,
+        anchor_id: int | None = None,
+        mounting: str = FLOOR_MOUNTING,
+        anchor_height: float = 0.0,
+    ) -> None:
+        """Fix the world origin, how markers are mounted, and how high the anchor sits above the floor.
+
+        anchor_height matters because everything downstream is expressed relative
+        to the anchor. A marker mounted partway up a wall would otherwise put the
+        world's z=0 plane at that marker's height, so zone polygons would float in
+        the air at marker level and a person's floor position would be measured
+        from the wrong datum. Giving the anchor its real height above the floor
+        moves z=0 down to the actual floor, where the rest of the system assumes
+        it is.
+        """
+        if mounting not in _UP_AXIS:
+            raise ValueError(f"mounting must be one of {sorted(_UP_AXIS)}, got {mounting!r}")
         self.anchor_id = anchor_id
+        self.mounting = mounting
+        self.anchor_height = anchor_height
         self.poses: dict[int, np.ndarray] = {}
+
+    @property
+    def up_axis(self) -> int:
+        """Index of the marker-local axis that points at the ceiling under this mounting."""
+        return _UP_AXIS[self.mounting]
+
+    def anchor_pose(self) -> np.ndarray:
+        """The world pose given to the anchor marker: z pointing up, and the floor at z=0."""
+        matrix = np.eye(4, dtype=np.float64)
+        matrix[:3, :3] = _ANCHOR_ROTATION[self.mounting]
+        matrix[2, 3] = self.anchor_height
+        return matrix
 
     def __contains__(self, marker_id: int) -> bool:
         """True if this marker's world pose is already known."""
@@ -163,7 +219,7 @@ class CameraLocalizer:
         if anchor_id not in candidates:
             return
         self.marker_map.anchor_id = anchor_id
-        self.marker_map.poses[anchor_id] = np.eye(4, dtype=np.float64)
+        self.marker_map.poses[anchor_id] = self.marker_map.anchor_pose()
 
     def _camera_pose_candidates(self, candidates: dict[int, list[MarkerPose]]) -> list[np.ndarray]:
         """Every camera pose implied by pairing a mapped marker with one of its ambiguous orientations."""
@@ -210,9 +266,14 @@ class CameraLocalizer:
         for marker_id, poses in candidates.items():
             if marker_id in self.marker_map:
                 continue
-            best = max(poses, key=lambda pose: (camera_pose @ pose.matrix)[2, 2])
+            axis = self.marker_map.up_axis
+            best = max(poses, key=lambda pose: (camera_pose @ pose.matrix)[2, axis])
             world = camera_pose @ best.matrix
-            penalty += abs(float(world[2, 3])) + (1.0 - float(world[2, 2]))
+            # Only floor markers share a plane; wall markers on different walls do
+            # not, so for them the height term carries no information and only the
+            # upright constraint is scored.
+            off_plane = abs(float(world[2, 3])) if self.marker_map.mounting == FLOOR_MOUNTING else 0.0
+            penalty += off_plane + (1.0 - float(world[2, axis]))
         return penalty
 
     def _best_camera_pose(self, candidates: dict[int, list[MarkerPose]]) -> tuple[np.ndarray | None, float | None]:
@@ -276,10 +337,12 @@ class CameraLocalizer:
         for marker_id, poses in candidates.items():
             if marker_id in self.marker_map:
                 continue
-            # Zone markers are all mounted flat on one surface, so of the two
-            # orientations the correct one is whichever ends up facing the same
-            # way as the anchor rather than back through the floor.
-            best = max(poses, key=lambda pose: (camera_pose @ pose.matrix)[2, 2])
+            # Of the two orientations, the correct one is whichever ends up with
+            # the marker's own up-axis pointing at the ceiling rather than at the
+            # ground -- true for markers flat on the floor and upright on a wall
+            # alike, and unlike coplanarity it holds across different walls.
+            axis = self.marker_map.up_axis
+            best = max(poses, key=lambda pose: (camera_pose @ pose.matrix)[2, axis])
             self.marker_map.poses[marker_id] = camera_pose @ best.matrix
             learned.append(marker_id)
         return sorted(learned)

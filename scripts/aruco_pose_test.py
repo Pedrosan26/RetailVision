@@ -35,6 +35,8 @@ import numpy as np
 from src.retailvision.calibration import CameraCalibration
 from src.retailvision.marker_map import (
     DEFAULT_HEAD_HEIGHT_METERS,
+    FLOOR_MOUNTING,
+    WALL_MOUNTING,
     CameraLocalizer,
     MarkerMap,
     project_to_plane,
@@ -56,6 +58,14 @@ WARMUP_TIMEOUT = 25.0
 # one another is a property of the whole set, so it needs reporting in one place.
 STATUS_INTERVAL = 2.0
 
+# Pose accuracy collapses when a marker is either too small in the image or seen
+# too near edge-on, and both look like ordinary detections until the numbers are
+# compared. Below roughly 50 pixels a side there are too few pixels to localize
+# corners precisely; beyond about 60 degrees off face-on the square degenerates
+# towards a line and its corners stop being well separated.
+MIN_MARKER_SIDE_PX = 50.0
+MAX_MARKER_TILT_DEGREES = 60.0
+
 
 def parse_args() -> argparse.Namespace:
     """Parse camera sources, their calibrations, the printed marker size, and optional zone config."""
@@ -64,6 +74,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--calibration", nargs="+", required=True, help="Calibration JSON per source, in the same order")
     parser.add_argument("--marker-size", type=float, default=0.10, help="Printed marker side length in meters (default: 0.10)")
     parser.add_argument("--anchor", type=int, default=None, help="Marker ID to fix as the world origin (default: first seen)")
+    parser.add_argument(
+        "--marker-mounting",
+        choices=[FLOOR_MOUNTING, WALL_MOUNTING],
+        default=FLOOR_MOUNTING,
+        help="How markers are physically mounted: flat on the floor, or upright on walls (default: floor)",
+    )
+    parser.add_argument(
+        "--marker-height",
+        type=float,
+        default=0.0,
+        help="Height in meters of the ANCHOR marker's centre above the floor; puts the world's z=0 plane on the real floor",
+    )
     parser.add_argument("--zones", type=Path, default=None, help="Optional zone definition JSON")
     parser.add_argument(
         "--markers",
@@ -120,6 +142,7 @@ class CameraView:
         self.camera_pose: np.ndarray | None = None
         self.reprojection_error: float | None = None
         self.visible_markers: set[int] = set()
+        self.localization = None
         self.click: tuple[int, int] | None = None
         self.click_label = ""
 
@@ -239,6 +262,50 @@ def draw_status(frame: np.ndarray, view: CameraView, marker_map: MarkerMap, zone
         cv2.putText(frame, line, (10, 30 + index * 26), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color if index == 0 else TEXT_COLOR, 2)
 
 
+def print_marker_detail(view: "CameraView", marker_map: MarkerMap) -> None:
+    """Print each visible marker's measured distance and, when mapped, how far its own reprojection is off.
+
+    A single aggregate fit says the frame is inconsistent but not which
+    measurement disagrees. Per-marker numbers separate the usual causes: a wrong
+    printed size shows as every distance being scaled alike, a duplicated or
+    misplaced marker shows as one marker's reprojection dwarfing the rest.
+    """
+    result = view.localization
+    if result is None or not result.marker_poses:
+        return
+    for marker_id in sorted(result.marker_poses):
+        pose = result.marker_poses[marker_id]
+        # A square cannot look larger than face-on, so comparing its apparent size
+        # against the size its own reported distance implies recovers how far off
+        # face-on it is -- and catches a distance that cannot be right at all.
+        apparent = float(np.sqrt(max(pose.pixel_area, 1.0)))
+        implied = view.calibration.camera_matrix[0, 0] * view.estimator.marker_size / max(pose.distance_meters, 1e-6)
+        ratio = min(apparent / implied, 1.0) if implied > 0 else 0.0
+        tilt = float(np.degrees(np.arccos(np.clip(ratio, 0.0, 1.0))))
+        detail = f"distance {pose.distance_meters:5.2f}m, {apparent:4.0f}px side, {tilt:2.0f}deg off face-on"
+
+        warnings = []
+        if apparent < MIN_MARKER_SIDE_PX:
+            warnings.append("TOO SMALL")
+        if tilt > MAX_MARKER_TILT_DEGREES:
+            warnings.append("TOO OBLIQUE")
+        if warnings:
+            detail += "  <<< " + " + ".join(warnings) + " -- pose unreliable"
+        if view.camera_pose is not None and marker_id in marker_map:
+            corners = marker_map.world_corners(marker_id, view.estimator.marker_size)
+            world_to_camera = invert_pose(view.camera_pose)
+            rvec, _ = cv2.Rodrigues(world_to_camera[:3, :3])
+            projected, _ = cv2.projectPoints(
+                corners, rvec, world_to_camera[:3, 3],
+                view.calibration.camera_matrix, view.calibration.dist_coeffs,
+            )
+            off = float(np.linalg.norm(projected.reshape(4, 2) - pose.corners, axis=1).mean())
+            detail += f", reprojects {off:8.2f}px off"
+        else:
+            detail += ", unmapped"
+        print(f"      marker {marker_id}: {detail}")
+
+
 def print_status(views: list["CameraView"], marker_map: MarkerMap, zone_map: ZoneMap | None) -> None:
     """Print whether every camera is localized and which markers link them, for the whole set at once."""
     print("\n--- marker map ---")
@@ -253,6 +320,7 @@ def print_status(views: list["CameraView"], marker_map: MarkerMap, zone_map: Zon
             position = view.camera_pose[:3, 3]
             state = f"at ({position[0]:+.2f}, {position[1]:+.2f}, {position[2]:+.2f})m  fit {view.reprojection_error:.2f}px"
         print(f"  {view.name}: sees {seen or '[]'}, of which mapped {linked or '[]'}  -> {state}")
+        print_marker_detail(view, marker_map)
 
     # A marker seen by two cameras at once is what ties their coordinate frames
     # together; without at least one such marker the cameras cannot be related.
@@ -281,7 +349,7 @@ def print_status(views: list["CameraView"], marker_map: MarkerMap, zone_map: Zon
 def main() -> None:
     """Run every camera against one shared marker map, drawing poses, zones and click read-outs live."""
     args = parse_args()
-    marker_map = MarkerMap(anchor_id=args.anchor)
+    marker_map = MarkerMap(anchor_id=args.anchor, mounting=args.marker_mounting, anchor_height=args.marker_height)
     zones = load_zones(args.zones) if args.zones else []
     zone_map = ZoneMap(zones, marker_map) if zones else None
 
@@ -321,6 +389,7 @@ def main() -> None:
                 view.camera_pose = result.camera_pose
                 view.reprojection_error = result.reprojection_error
                 view.visible_markers = set(result.marker_poses)
+                view.localization = result
 
                 draw_markers(frame, view, result.marker_poses)
                 if zone_map is not None:
