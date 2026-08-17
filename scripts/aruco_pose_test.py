@@ -26,6 +26,7 @@ Press 'q' to quit, 'r' to reset the map.
 """
 
 import argparse
+import time
 from pathlib import Path
 
 import cv2
@@ -45,6 +46,16 @@ AXIS_COLOR = (255, 200, 0)
 TEXT_COLOR = (0, 255, 0)
 WARN_COLOR = (0, 0, 255)
 
+# Requesting a resolution makes the backend rebuild the capture session, and on
+# macOS the camera can take several seconds to deliver its first frame after
+# that. Reading immediately is indistinguishable from a dead camera.
+WARMUP_TIMEOUT = 25.0
+
+# How often the consolidated map status is printed to the console. The per-window
+# overlays only show one camera each; whether the cameras are actually linked to
+# one another is a property of the whole set, so it needs reporting in one place.
+STATUS_INTERVAL = 2.0
+
 
 def parse_args() -> argparse.Namespace:
     """Parse camera sources, their calibrations, the printed marker size, and optional zone config."""
@@ -54,6 +65,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--marker-size", type=float, default=0.10, help="Printed marker side length in meters (default: 0.10)")
     parser.add_argument("--anchor", type=int, default=None, help="Marker ID to fix as the world origin (default: first seen)")
     parser.add_argument("--zones", type=Path, default=None, help="Optional zone definition JSON")
+    parser.add_argument(
+        "--markers",
+        type=int,
+        nargs="+",
+        default=None,
+        help="Marker IDs actually deployed; anything else is ignored as a misread (default: those in --zones plus --anchor)",
+    )
     parser.add_argument(
         "--head-height",
         type=float,
@@ -69,20 +87,55 @@ def parse_args() -> argparse.Namespace:
 class CameraView:
     """One open camera contributing observations to the shared marker map."""
 
-    def __init__(self, source: str, calibration_path: str, marker_size: float, marker_map: MarkerMap) -> None:
+    def __init__(
+        self,
+        source: str,
+        calibration_path: str,
+        marker_size: float,
+        marker_map: MarkerMap,
+        allowed_ids: set[int] | None = None,
+    ) -> None:
         """Open the camera and bind it to its own calibration, pose estimator and localizer."""
         self.name = f"Camera {source}"
         self.calibration = CameraCalibration.load(calibration_path)
-        self.estimator = MarkerPoseEstimator(self.calibration, marker_size)
+        self.estimator = MarkerPoseEstimator(self.calibration, marker_size, allowed_ids=allowed_ids)
         self.localizer = CameraLocalizer(self.estimator, marker_map)
         self.capture = cv2.VideoCapture(int(source) if source.isdigit() else source)
         if not self.capture.isOpened():
             raise RuntimeError(f"Could not open camera at source: {source}")
+        # Ask the camera for exactly the resolution its calibration was captured
+        # at, rather than leaving the two to be matched by hand. Focal length is
+        # in pixels, so a mismatch rescales every distance without failing.
+        if self._resolution() != tuple(self.calibration.image_size):
+            self.capture.set(cv2.CAP_PROP_FRAME_WIDTH, self.calibration.image_size[0])
+            self.capture.set(cv2.CAP_PROP_FRAME_HEIGHT, self.calibration.image_size[1])
+            if not self._wait_for_first_frame():
+                self.capture.release()
+                raise RuntimeError(
+                    f"{self.name} delivered no frame within {WARMUP_TIMEOUT:.0f}s of being set to "
+                    f"{self.calibration.image_size[0]}x{self.calibration.image_size[1]}. "
+                    "Some cameras only run at their native resolution -- recalibrate this one there."
+                )
         self._check_resolution()
         self.camera_pose: np.ndarray | None = None
         self.reprojection_error: float | None = None
+        self.visible_markers: set[int] = set()
         self.click: tuple[int, int] | None = None
         self.click_label = ""
+
+    def _resolution(self) -> tuple[int, int]:
+        """The resolution the camera is currently delivering."""
+        return (int(self.capture.get(cv2.CAP_PROP_FRAME_WIDTH)), int(self.capture.get(cv2.CAP_PROP_FRAME_HEIGHT)))
+
+    def _wait_for_first_frame(self) -> bool:
+        """Block until the camera delivers a frame after a resolution change, or the timeout expires."""
+        deadline = time.monotonic() + WARMUP_TIMEOUT
+        while time.monotonic() < deadline:
+            ok, _ = self.capture.read()
+            if ok:
+                return True
+            time.sleep(0.1)
+        return False
 
     def _check_resolution(self) -> None:
         """Warn if the camera is running at a different resolution than it was calibrated at.
@@ -186,6 +239,45 @@ def draw_status(frame: np.ndarray, view: CameraView, marker_map: MarkerMap, zone
         cv2.putText(frame, line, (10, 30 + index * 26), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color if index == 0 else TEXT_COLOR, 2)
 
 
+def print_status(views: list["CameraView"], marker_map: MarkerMap, zone_map: ZoneMap | None) -> None:
+    """Print whether every camera is localized and which markers link them, for the whole set at once."""
+    print("\n--- marker map ---")
+    print(f"  mapped markers: {marker_map.marker_ids}   anchor: {marker_map.anchor_id}")
+
+    for view in views:
+        seen = sorted(view.visible_markers)
+        linked = sorted(m for m in seen if m in marker_map)
+        if view.camera_pose is None:
+            state = "NOT LOCALIZED"
+        else:
+            position = view.camera_pose[:3, 3]
+            state = f"at ({position[0]:+.2f}, {position[1]:+.2f}, {position[2]:+.2f})m  fit {view.reprojection_error:.2f}px"
+        print(f"  {view.name}: sees {seen or '[]'}, of which mapped {linked or '[]'}  -> {state}")
+
+    # A marker seen by two cameras at once is what ties their coordinate frames
+    # together; without at least one such marker the cameras cannot be related.
+    bridges = []
+    for first in range(len(views)):
+        for second in range(first + 1, len(views)):
+            shared = sorted(views[first].visible_markers & views[second].visible_markers)
+            if shared:
+                bridges.append(f"{views[first].name} <-> {views[second].name} via {shared}")
+    if bridges:
+        print("  shared markers (camera links):")
+        for bridge in bridges:
+            print(f"    {bridge}")
+    else:
+        print("  shared markers: NONE -- no camera pair sees a common marker right now")
+
+    if zone_map is not None:
+        for zone_id in zone_map.zone_ids:
+            missing = zone_map.missing_markers(zone_id)
+            print(f"  zone {zone_id}: {'READY' if not missing else f'waiting on {missing}'}")
+
+    localized = sum(1 for v in views if v.camera_pose is not None)
+    print(f"  => {localized}/{len(views)} camera(s) localized in the shared frame")
+
+
 def main() -> None:
     """Run every camera against one shared marker map, drawing poses, zones and click read-outs live."""
     args = parse_args()
@@ -193,8 +285,21 @@ def main() -> None:
     zones = load_zones(args.zones) if args.zones else []
     zone_map = ZoneMap(zones, marker_map) if zones else None
 
+    # Restrict detection to the markers actually deployed. A 4x4 marker is easy to
+    # misread out of noise or blur, and a phantom ID that reaches the map is
+    # permanent, so an explicit allow-list is worth far more than it costs.
+    allowed_ids: set[int] | None = None
+    if args.markers is not None:
+        allowed_ids = set(args.markers)
+    elif zones:
+        allowed_ids = {m for zone in zones for m in zone.marker_ids}
+    if allowed_ids is not None and args.anchor is not None:
+        allowed_ids.add(args.anchor)
+    if allowed_ids is not None:
+        print(f"Accepting only marker IDs {sorted(allowed_ids)}; any other detection is treated as a misread.")
+
     views = [
-        CameraView(source, calibration, args.marker_size, marker_map)
+        CameraView(source, calibration, args.marker_size, marker_map, allowed_ids)
         for source, calibration in zip(args.source, args.calibration)
     ]
     for view in views:
@@ -202,6 +307,7 @@ def main() -> None:
         cv2.setMouseCallback(view.name, on_click, view)
 
     print(f"{len(views)} camera(s) open, sharing one marker map. Click to probe a position, 'r' resets, 'q' quits.")
+    last_status = 0.0
     try:
         while True:
             for view in views:
@@ -214,6 +320,7 @@ def main() -> None:
                     print(f"{view.name} mapped new markers: {result.learned}")
                 view.camera_pose = result.camera_pose
                 view.reprojection_error = result.reprojection_error
+                view.visible_markers = set(result.marker_poses)
 
                 draw_markers(frame, view, result.marker_poses)
                 if zone_map is not None:
@@ -221,6 +328,10 @@ def main() -> None:
                 resolve_click(view, zone_map, args.head_height)
                 draw_status(frame, view, marker_map, zone_map)
                 cv2.imshow(view.name, frame)
+
+            if time.monotonic() - last_status >= STATUS_INTERVAL:
+                print_status(views, marker_map, zone_map)
+                last_status = time.monotonic()
 
             key = cv2.waitKey(1) & 0xFF
             if key == ord("q"):

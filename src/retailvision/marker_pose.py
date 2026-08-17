@@ -106,12 +106,20 @@ class MarkerPoseEstimator:
         calibration: CameraCalibration,
         marker_size: float,
         dictionary: int = DEFAULT_DICTIONARY,
+        allowed_ids: set[int] | None = None,
     ) -> None:
-        """Bind a calibrated camera to the one physical marker size every marker is printed at, in meters."""
+        """Bind a calibrated camera to the marker size every marker is printed at, and optionally to the IDs in use."""
         if marker_size <= 0:
             raise ValueError("marker_size must be a positive length in meters")
         self.calibration = calibration
         self.marker_size = marker_size
+        # A 4x4 marker carries little redundancy, so noise, motion blur and
+        # incidental rectangles in a scene are regularly decoded as valid IDs that
+        # were never printed. Such a phantom is indistinguishable from a real
+        # marker once mapped, and because poses are first-observation-wins it
+        # corrupts the frame permanently. Restricting detection to the IDs
+        # actually deployed removes the whole failure mode.
+        self.allowed_ids = allowed_ids
         self._object_points = marker_object_points(marker_size)
         self._detector = cv2.aruco.ArucoDetector(
             cv2.aruco.getPredefinedDictionary(dictionary), _detector_parameters()
@@ -122,7 +130,10 @@ class MarkerPoseEstimator:
         corners, ids, _ = self._detector.detectMarkers(frame)
         if ids is None:
             return {}
-        return {int(marker_id): c[0] for c, marker_id in zip(corners, ids.flatten())}
+        detected = {int(marker_id): c[0] for c, marker_id in zip(corners, ids.flatten())}
+        if self.allowed_ids is None:
+            return detected
+        return {marker_id: c for marker_id, c in detected.items() if marker_id in self.allowed_ids}
 
     def estimate(self, frame: np.ndarray) -> dict[int, MarkerPose]:
         """Detect every visible marker and return each one's best-fitting pose, keyed by marker ID."""

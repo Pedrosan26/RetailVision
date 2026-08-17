@@ -60,6 +60,11 @@ _MIN_RAY_PLANE_ANGLE = 1e-6
 # previous frame decides it rather than sub-pixel noise.
 _TIE_BREAK_RATIO = 1.5
 
+# A camera whose own localization does not explain the markers it can already see
+# has no business placing new ones: whatever is wrong with its pose would be baked
+# into every marker it adds, and first-observation-wins makes that permanent.
+MAX_EXTEND_REPROJECTION_PX = 3.0
+
 # Candidate poses whose off-plane penalties are within this much of each other
 # are not separated by the mounting plane either, and fall through to continuity.
 _PLANARITY_TOLERANCE = 0.02
@@ -145,7 +150,8 @@ class CameraLocalizer:
 
         camera_pose = self._refine(camera_pose, candidates)
         self.camera_pose = camera_pose
-        learned = self._extend(camera_pose, candidates)
+        error = self._reprojection_error(camera_pose, candidates)
+        learned = self._extend(camera_pose, candidates) if error <= MAX_EXTEND_REPROJECTION_PX else []
         chosen = self._chosen_poses(camera_pose, candidates)
         return Localization(camera_pose=camera_pose, marker_poses=chosen, learned=learned, reprojection_error=error)
 
