@@ -35,17 +35,17 @@ plus its known printed size, are already a complete 3D-to-2D
 correspondence set on their own, so `cv2.solvePnP` recovers that marker's
 full position and orientation relative to the camera from that one marker.
 
-The printed size is the only measurement in the entire system. The room is
-never measured, distances between markers are never measured, and nothing
-has to be re-measured when a zone is moved or resized -- which was the
-explicit requirement, since the zone perimeter is not constant across
-deployments.
+The printed size is one of only two measurements in the entire system; the
+other is how high the anchor marker sits above the floor. The room is never
+measured, distances between markers are never measured, and nothing has to
+be re-measured when a zone is moved or resized -- which was the explicit
+requirement, since the zone perimeter is not constant across deployments.
 
 From there:
 
-- One marker is fixed as the **anchor**, defining the world origin. With
-  markers laid flat on the floor, world z=0 is the floor and world x/y are
-  floor coordinates, in meters.
+- One marker is fixed as the **anchor**, defining the world origin. World
+  z=0 is placed on the floor, `--marker-height` below the anchor, so world
+  x/y are floor coordinates in meters and z is height above the floor.
 - A camera that can see any one already-mapped marker can compute where it
   itself is standing in that world frame.
 - From that position, every other marker it can see gets added to the map.
@@ -81,11 +81,14 @@ tests this turned a 2x3m zone into a 9-metre error.
    marker's corners, but predicts the other markers in view badly. Scoring
    a candidate camera pose against every mapped marker separates them
    decisively.
-2. **The mounting plane.** While only the anchor is mapped, signal 1
-   cannot help, since both candidates explain that one marker equally. But
-   the markers all being on a common plane does separate them: the wrong
-   orientation lifts every *other* marker in view off that plane and tilts
-   it, which is measurable directly.
+2. **The mounting.** While only the anchor is mapped, signal 1 cannot
+   help, since both candidates explain that one marker equally. How the
+   markers are physically mounted does separate them: the wrong orientation
+   points a marker's up-axis at the ground instead of the ceiling. For
+   floor markers that axis is the normal, and their shared plane gives an
+   extra term; for wall markers it is the printed up direction, which holds
+   even across walls facing different ways. See "Where the markers are
+   mounted".
 3. **Continuity.** If both survive, prefer whichever is closest to where
    this camera was last frame. A fixed camera does not jump.
 
@@ -126,6 +129,36 @@ the detector does not do by default. Whole-pixel corners are ample for
 reading a marker's ID but not for solving its pose; enabling refinement
 roughly halved pose error in testing.
 
+## Where the markers are mounted
+
+Markers can lie flat on the floor or stand upright on walls, and the two
+need different handling. Pass `--marker-mounting floor` or `wall`.
+
+**Wall mounting is usually the practical choice.** Cameras sit at roughly
+human height, so a floor marker is seen at a steep grazing angle -- often
+past 80 degrees off face-on, where its image degenerates towards a line and
+corner localization becomes hopeless. Upright markers face the cameras.
+
+Two consequences follow from the mounting:
+
+- **Which axis points up.** Resolving a square's two-fold pose ambiguity
+  needs to know which orientation is physically possible. Flat markers
+  point their *normal* at the ceiling; upright markers point their printed
+  *up direction* there. Markers on four different walls are neither
+  coplanar nor co-facing, so the coplanarity assumption fails outright for
+  them -- but they are all still upright, and that is enough.
+- **Where the floor is.** The world frame is anchored on one marker, so a
+  marker partway up a wall would put z=0 at its own height: zone polygons
+  float in mid-air at marker level, and back-projecting a person onto a
+  head-height plane aims above the camera instead of below it.
+  `--marker-height`, the anchor's measured height above the floor, moves
+  z=0 down to the real floor.
+
+**A zone's corners must enclose the area you want to measure.** Markers
+along a single wall all lie in one vertical plane, so projected down to the
+floor they collapse onto a line and bound nothing. One marker per wall
+around a room gives a proper polygon; several on one wall do not.
+
 ## Setting it up
 
 1. **Generate and print markers.** One ID per zone corner, all at the same
@@ -146,8 +179,22 @@ roughly halved pose error in testing.
    Hold a printed chessboard at clearly different distances, tilts and
    positions, including near the frame corners where distortion is
    strongest. Views that are all head-on and centered constrain the model
-   poorly however many are captured. A reprojection error below about
-   0.5px is a good result.
+   poorly however many are captured.
+
+   **Check the self-consistency line, not just the reprojection error.**
+   Reprojection error only says the model fits the views it was solved
+   from, which is exactly what an overfitted model does best. Three of the
+   four cameras this was developed against produced errors between 0.31 and
+   0.86px while being unusable: their radial coefficients had absorbed
+   noise as enormous values (k3 of -12.6, -12.2, +165.7) that cancel within
+   the captured views and diverge towards the frame corners. Solving a pose
+   undistorts and reprojecting distorts again, and such a model makes those
+   two disagree by hundreds of pixels -- which shows up downstream as a
+   marker map that looks broken for no visible reason.
+
+   The script reports both, simplifies the distortion model until it is
+   self-consistent, and refuses to endorse one that is not. Aim for
+   reprojection under 0.5px **and** self-consistency `ok`.
 
 3. **Lay the markers flat at the zone's floor corners**, and define the
    zone by their IDs. Copy `config/zones.example.json` to
@@ -207,6 +254,10 @@ as that person's floor footprint, which is what the zone test needs.
   centroid so that markers can be listed in any order, which trades a
   shape restriction that does not bite for retail floor areas against a
   setup step that is easy to get wrong.
+- **Marker poses are not reconciled when chains meet.** Two cameras can
+  reach the same marker by different routes; nothing detects or corrects a
+  disagreement between them. A loop closure or bundle adjustment would,
+  and is the natural next step if accuracy stops being adequate.
 - **Head height is a constant, not per-person.** A tall and a short person
   are placed slightly differently for the same true floor position. Small
   relative to zone dimensions, but it is a real source of error near a
