@@ -26,7 +26,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from src.retailvision.calibration import calibrate, find_chessboard_corners, view_reprojection_errors
+from src.retailvision.calibration import calibrate, find_chessboard_corners, round_trip_error, view_reprojection_errors
 
 DEFAULT_PATTERN = "9x6"
 DEFAULT_MIN_SAMPLES = 15
@@ -232,12 +232,25 @@ def report(calibration, corner_sets: list, pattern: tuple[int, int], square_size
     tangential = float(np.max(np.abs(calibration.dist_coeffs.ravel()[2:4])))
 
     print(f"\nReprojection error: {calibration.reprojection_error:.4f} px (below ~0.5 is good, above ~1.0 is not usable)")
+
+    # Reprojection error only says the model fits the views it was solved from.
+    # This says whether the model is self-consistent at all, which is a different
+    # and more basic question -- and one a low reprojection error can hide.
+    round_trip = round_trip_error(calibration)
+    verdict = "ok" if round_trip < 1.0 else "BROKEN -- do not use this calibration"
+    print(f"Lens-model self-consistency: {round_trip:.2f} px ({verdict})")
     print(f"Optical center off image center by {offset_x:.0f}px, {offset_y:.0f}px (a large offset means the views did not cover the frame)")
     print(f"Largest tangential distortion term: {tangential:.4f} (above ~0.01 usually means overfitting)")
 
     errors = view_reprojection_errors(corner_sets, pattern, calibration, square_size)
     ranked = sorted(enumerate(errors, start=1), key=lambda pair: pair[1], reverse=True)
     print("Worst-fitting views: " + ", ".join(f"#{index} ({error:.2f}px)" for index, error in ranked[:5]))
+
+    if round_trip > 1.0:
+        print("\nThe lens model does not round-trip: poses solved with it will not reproject correctly,")
+        print("so distances and marker positions will be wrong even though the error above looks fine.")
+        print("Recapture with more spread -- especially the four frame corners and the steep tilts.")
+        return
 
     if calibration.reprojection_error > 1.0:
         spread = max(errors) / max(min(errors), 1e-9)

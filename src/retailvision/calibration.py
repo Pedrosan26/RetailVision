@@ -34,6 +34,28 @@ import numpy as np
 CORNER_CRITERIA = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 CORNER_WINDOW = (11, 11)
 
+# The third radial coefficient is rarely identifiable from a handheld calibration
+# session, and left free it reliably absorbs noise as an enormous value that
+# cancels within the captured views and diverges outside them. Such a model keeps
+# a low reprojection error while being physically absurd: solvePnP undistorts and
+# projectPoints re-distorts, and the two stop agreeing, so a pose can fit its own
+# corners and still land hundreds of pixels away when projected back. Fixing k3
+# at zero costs nothing for ordinary lenses and removes the failure entirely.
+# Distortion models are tried richest-first and the first self-consistent one is
+# kept. A handheld session rarely constrains the higher radial terms, and left
+# free they absorb noise as huge values that cancel within the captured views and
+# diverge towards the frame corners -- precisely where a marker most needs to be
+# trusted. Dropping a term the data cannot support loses nothing real.
+CALIBRATION_FLAG_LADDER = (
+    ("k1+k2, tangential", cv2.CALIB_FIX_K3),
+    ("k1 only, tangential", cv2.CALIB_FIX_K3 | cv2.CALIB_FIX_K2),
+    ("k1 only, no tangential", cv2.CALIB_FIX_K3 | cv2.CALIB_FIX_K2 | cv2.CALIB_ZERO_TANGENT_DIST),
+)
+
+# Above this the undistort/distort round trip disagrees enough that solved poses
+# will not reproject correctly, whatever the reprojection error says.
+MAX_ROUND_TRIP_PX = 1.0
+
 
 @dataclass(frozen=True)
 class CameraCalibration:
@@ -110,18 +132,37 @@ def view_reprojection_errors(
     return errors
 
 
-def calibrate(
-    corner_sets: list[np.ndarray],
-    pattern_size: tuple[int, int],
-    image_size: tuple[int, int],
-    square_size: float = 0.025,
-) -> CameraCalibration:
-    """Solve for the camera's intrinsics from several chessboard corner observations taken at different angles."""
-    if not corner_sets:
-        raise ValueError("Need at least one chessboard observation to calibrate")
+def round_trip_error(calibration: CameraCalibration) -> float:
+    """Measure whether the lens model is self-consistent, sampled densely across the whole frame.
+
+    A calibration can fit its own capture session well and still be unusable,
+    because undistortion and distortion are separate operations that only agree
+    when the coefficients are physically sensible. Sampling only the middle of
+    the frame hides the problem: an overfitted radial model is typically well
+    behaved near the optical centre and diverges towards the corners, which is
+    where a marker most needs to be trusted. So the grid spans the frame, and the
+    score is the 90th percentile rather than the median, which a mostly-fine
+    model would otherwise flatter.
+    """
+    width, height = calibration.image_size
+    xs = np.linspace(width * 0.05, width * 0.95, 25)
+    ys = np.linspace(height * 0.05, height * 0.95, 25)
+    grid = np.array([[x, y] for y in ys for x in xs], dtype=np.float64).reshape(-1, 1, 2)
+
+    normalized = cv2.undistortPoints(grid, calibration.camera_matrix, calibration.dist_coeffs)
+    rays = np.hstack([normalized.reshape(-1, 2), np.ones((len(normalized), 1))])
+    back, _ = cv2.projectPoints(
+        rays, np.zeros(3), np.zeros(3), calibration.camera_matrix, calibration.dist_coeffs
+    )
+    deviations = np.linalg.norm(back.reshape(-1, 2) - grid.reshape(-1, 2), axis=1)
+    return float(np.percentile(deviations, 90))
+
+
+def _solve(corner_sets, pattern_size, image_size, square_size, flags) -> CameraCalibration:
+    """Run the calibration solver once with a given distortion model."""
     object_points = [chessboard_object_points(pattern_size, square_size)] * len(corner_sets)
     error, camera_matrix, dist_coeffs, _, _ = cv2.calibrateCamera(
-        object_points, corner_sets, image_size, None, None
+        object_points, corner_sets, image_size, None, None, flags=flags
     )
     return CameraCalibration(
         camera_matrix=camera_matrix,
@@ -129,3 +170,28 @@ def calibrate(
         image_size=image_size,
         reprojection_error=float(error),
     )
+
+
+def calibrate(
+    corner_sets: list[np.ndarray],
+    pattern_size: tuple[int, int],
+    image_size: tuple[int, int],
+    square_size: float = 0.025,
+) -> CameraCalibration:
+    """Solve for the camera's intrinsics, simplifying the distortion model until the result is self-consistent."""
+    if not corner_sets:
+        raise ValueError("Need at least one chessboard observation to calibrate")
+
+    fallback = None
+    for label, flags in CALIBRATION_FLAG_LADDER:
+        calibration = _solve(corner_sets, pattern_size, image_size, square_size, flags)
+        deviation = round_trip_error(calibration)
+        if deviation <= MAX_ROUND_TRIP_PX:
+            if fallback is not None:
+                print(f"Distortion model simplified to '{label}' -- richer models did not round-trip.")
+            return calibration
+        print(f"Distortion model '{label}' is not self-consistent ({deviation:.1f}px); trying a simpler one.")
+        fallback = calibration
+    return fallback
+
+
