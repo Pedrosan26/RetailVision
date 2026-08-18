@@ -2,8 +2,8 @@
 detection.py
 
 Pydantic request/response models for the ingestion and read endpoints.
-DetectionRecord mirrors the frozen 8-field log schema exactly -- see
-docs/schema.md in the repo root.
+DetectionRecord mirrors the log schema exactly -- see docs/schema.md in
+the repo root.
 """
 
 from datetime import datetime
@@ -12,10 +12,14 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class DetectionRecord(BaseModel):
-    """Validates one anonymized detection record against the frozen 8-field schema."""
+    """Validates one anonymized detection record against the log schema."""
 
     timestamp: datetime
     zone_id: str | None = None
+    # Optional so that camera nodes running without zones, and nodes not yet
+    # upgraded, keep validating against this model unchanged.
+    world_x: float | None = None
+    world_y: float | None = None
     count: int | None = None
     age_group: str
     gender: str
@@ -46,6 +50,8 @@ class DetectionOut(BaseModel):
     camera_node_id: str
     timestamp: datetime
     zone_id: str | None
+    world_x: float | None
+    world_y: float | None
     count: int | None
     age_group: str
     gender: str
@@ -55,12 +61,22 @@ class DetectionOut(BaseModel):
 
 
 class OccupancyOut(BaseModel):
-    """Latest known occupancy for one zone (or camera node, before zones exist)."""
+    """Latest known occupancy reported by one camera node, for one zone."""
 
     key: str
     camera_node_id: str
     zone_id: str | None
     count: int | None
+    timestamp: datetime
+
+
+class ZoneOccupancyOut(BaseModel):
+    """A zone's headcount with people seen by several cameras counted once."""
+
+    zone_id: str
+    total: int
+    per_camera: dict[str, int]
+    cameras_reporting: int
     timestamp: datetime
 
 

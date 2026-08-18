@@ -67,7 +67,9 @@ retailVision/
     store/      uiStore.ts -- Zustand, UI-only state
     components/
       layout/     AppShell (sidebar + routed content), Sidebar
-      occupancy/  OccupancyGrid, OccupancyCard -- live per-zone/camera-node counts
+      occupancy/  ZoneOccupancyGrid -- per-zone headcount, people seen by several cameras counted once;
+                  OccupancyGrid, OccupancyCard -- what each camera node last reported, unmerged
+      charts/     StackedAreaChart, DistributionBars, HistoricalCharts -- hand-rolled SVG over /aggregates
       detections/ RecentActivityFeed -- compact recent-detections list for the Overview page
       common/     LoadingState, ErrorState
     pages/      OverviewPage, DetectionsPage, ZonesPage, NotFoundPage

@@ -1,1 +1,48 @@
 @import "tailwindcss";
+
+/* Chart tokens.
+ *
+ * Charts are written against roles rather than raw hex, so the light/dark
+ * values swap in one place. Both modes are chosen deliberately -- the dark
+ * column is the same hues re-stepped for a dark surface, not an inversion,
+ * because an inverted palette drifts out of the lightness band where colours
+ * stay distinguishable to colour-blind readers.
+ *
+ * The categorical order is fixed and assigned by slot, never cycled: a series
+ * keeps its colour when a filter changes how many series are on screen.
+ */
+.viz-root {
+  color-scheme: light;
+
+  --viz-surface: #fcfcfb;
+  --viz-ink: #0b0b0b;
+  --viz-ink-secondary: #52514e;
+  --viz-ink-muted: #898781;
+  --viz-grid: #e1e0d9;
+  --viz-axis: #c3c2b7;
+
+  --viz-series-1: #2a78d6;
+  --viz-series-2: #eb6834;
+  --viz-series-3: #1baf7a;
+  --viz-series-4: #eda100;
+  --viz-series-5: #e87ba4;
+}
+
+@media (prefers-color-scheme: dark) {
+  .viz-root {
+    color-scheme: dark;
+
+    --viz-surface: #1a1a19;
+    --viz-ink: #ffffff;
+    --viz-ink-secondary: #c3c2b7;
+    --viz-ink-muted: #898781;
+    --viz-grid: #2c2c2a;
+    --viz-axis: #383835;
+
+    --viz-series-1: #3987e5;
+    --viz-series-2: #d95926;
+    --viz-series-3: #199e70;
+    --viz-series-4: #c98500;
+    --viz-series-5: #d55181;
+  }
+}

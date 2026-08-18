@@ -83,3 +83,26 @@ an error.
 npm run build      # tsc -b && vite build -- production build
 npm run lint        # oxlint
 ```
+
+
+## Charts
+
+Chart colours live as CSS custom properties in `src/index.css` under
+`.viz-root`, and chart components are written against those roles rather
+than raw hex, so light and dark swap in one place. Both modes are chosen
+deliberately -- the dark values are the same hues re-stepped for a dark
+surface, not an inversion, which would drift out of the lightness band
+where colours stay distinguishable to colour-blind readers.
+
+The categorical order is fixed and assigned by slot, never cycled, so a
+series keeps its colour when a filter changes how many series are on
+screen.
+
+Charts are hand-rolled SVG (`src/components/charts/`) rather than a
+charting library: there are three chart forms, all small, and a library
+would bring its own theming layer to reconcile with these tokens plus a
+dependency to keep current. Revisit if the chart set grows much past this.
+
+`HistoricalCharts` owns the time range, and the range carries its own bucket
+size -- the two cannot be chosen independently, since 5-minute buckets over
+a week would be thousands of points on a chart 720 pixels wide.

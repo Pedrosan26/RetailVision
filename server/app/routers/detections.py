@@ -51,6 +51,8 @@ async def get_detections(
             camera_node_id=event.camera_node_id,
             timestamp=as_utc(event.timestamp),
             zone_id=event.zone_id,
+            world_x=event.world_x,
+            world_y=event.world_y,
             count=event.count,
             age_group=event.age_group,
             gender=event.gender,

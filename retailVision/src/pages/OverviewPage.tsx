@@ -2,8 +2,10 @@
 // recent-activity feed.
 
 import { CameraFeedGrid } from "../components/cameras/CameraFeedGrid";
+import { HistoricalCharts } from "../components/charts/HistoricalCharts";
 import { RecentActivityFeed } from "../components/detections/RecentActivityFeed";
 import { OccupancyGrid } from "../components/occupancy/OccupancyGrid";
+import { ZoneOccupancyGrid } from "../components/occupancy/ZoneOccupancyGrid";
 
 /** Renders the Overview page: live camera feeds, occupancy grid, and recent activity feed. */
 export function OverviewPage() {
@@ -24,10 +26,30 @@ export function OverviewPage() {
       </section>
 
       <section>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-          Live occupancy
+        <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          People per zone
         </h2>
+        <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
+          Someone visible to several cameras is counted once.
+        </p>
+        <ZoneOccupancyGrid />
+      </section>
+
+      <section>
+        <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          Latest per camera
+        </h2>
+        <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
+          What each node last reported, before merging.
+        </p>
         <OccupancyGrid />
+      </section>
+
+      <section>
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          History
+        </h2>
+        <HistoricalCharts />
       </section>
 
       <section>

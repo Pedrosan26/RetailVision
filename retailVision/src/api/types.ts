@@ -7,6 +7,8 @@ export interface Detection {
   camera_node_id: string;
   timestamp: string;
   zone_id: string | null;
+  world_x: number | null;
+  world_y: number | null;
   count: number | null;
   age_group: string;
   gender: string;
@@ -20,6 +22,15 @@ export interface Occupancy {
   camera_node_id: string;
   zone_id: string | null;
   count: number | null;
+  timestamp: string;
+}
+
+/** A zone's headcount with people seen by several cameras counted once. */
+export interface ZoneOccupancy {
+  zone_id: string;
+  total: number;
+  per_camera: Record<string, number>;
+  cameras_reporting: number;
   timestamp: string;
 }
 

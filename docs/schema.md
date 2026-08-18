@@ -20,23 +20,27 @@ originating ticket), each line should be parsed independently.
 |---|---|---|
 | `timestamp` | string | ISO 8601 UTC timestamp of the detection event. |
 | `zone_id` | string \| null | ID of the zone the person was standing in. `null` when the pipeline runs without `--zones`, and also when zones are configured but the camera cannot currently see a mapped marker -- so "unknown" stays distinct from "outside every zone". |
-| `count` | integer \| null | Net occupancy (entries minus exits so far) at the moment of the detection event, from `LineCounter`. `null` if no counter was supplied. |
+| `world_x` | number \| null | The person's floor position in the zone's shared world frame, in meters. `null` whenever `zone_id` is. |
+| `world_y` | number \| null | As above. Together these let the server recognise one person seen by several cameras as one person rather than several -- see `docs/server.md`. They describe a location, not an identity. |
+| `count` | integer \| null | Occupancy at the moment of the detection event: the zone's live headcount when the pipeline runs with `--zones`, otherwise `LineCounter`'s net crossings total. `null` if neither is available. |
 | `age_group` | string | Predicted age bracket, one of the age classifier's classes (see `docs/datasets/utkface.md`). |
 | `gender` | string | Predicted gender, one of the gender classifier's classes. |
 | `emotion` | string | Predicted emotion, one of the emotion classifier's classes. |
 | `dwell_seconds` | number \| null | Seconds the detected person's track has been present since its entry event. `null` if the track hasn't registered an entry yet, or no counter was supplied. |
 | `engagement_score` | number \| null | Normalized 0-100 engagement score for the zone/time window. `null` until the zone-emotion correlation module lands. |
 
-This 8-field shape is frozen: fields not yet computable are included now as
-`null` placeholders specifically so that later modules can populate real
-values without changing the schema downstream components (e.g. the
-dashboard) are built against.
+Fields not yet computable are included as `null` placeholders so later
+modules can populate real values without changing the shape downstream
+components are built against. The original eight fields have not changed
+meaning or order; `world_x`/`world_y` were appended when marker-based zones
+made a person's position available, and every consumer treats them as
+optional, so a camera node that predates them still ingests unchanged.
 
 ## Example records
 
 ```json
-{"timestamp": "2026-07-31T10:15:32.101+00:00", "zone_id": null, "count": 3, "age_group": "18-40", "gender": "Male", "emotion": "Neutral", "dwell_seconds": 12.4, "engagement_score": null}
-{"timestamp": "2026-07-31T10:15:32.340+00:00", "zone_id": null, "count": 3, "age_group": "6-12", "gender": "Female", "emotion": "Happy", "dwell_seconds": null, "engagement_score": null}
+{"timestamp": "2026-07-31T10:15:32.101+00:00", "zone_id": null, "world_x": null, "world_y": null, "count": 3, "age_group": "18-40", "gender": "Male", "emotion": "Neutral", "dwell_seconds": 12.4, "engagement_score": null}
+{"timestamp": "2026-08-18T09:02:11.884+00:00", "zone_id": "working_area_a", "world_x": 2.13, "world_y": 1.47, "count": 3, "age_group": "18-40", "gender": "Female", "emotion": "happy", "dwell_seconds": null, "engagement_score": null}
 ```
 
 ## Known limitations

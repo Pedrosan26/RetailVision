@@ -162,3 +162,41 @@ specific behavior. The hypertable/index DDL is exercised by actually
 applying the Alembic migration against real TimescaleDB, verified
 manually: `alembic upgrade head` followed by a real `POST
 /api/v1/ingest` and confirming the row lands correctly.
+
+
+## Cross-camera deduplication
+
+`GET /api/v1/occupancy/zones` answers how many people are actually in a
+zone, as opposed to `GET /api/v1/occupancy/live`, which reports what each
+camera individually last said.
+
+The two differ because **summing per-camera counts is not a headcount**.
+Cameras covering one area see each other's subjects, so a person visible to
+three cameras is reported three times; with several cameras on one room the
+sum can be a multiple of the truth.
+
+Merging is possible because every camera watching a zone reports positions
+in the same world frame (see `docs/aruco_zones.md`), so "is this the same
+person" becomes a distance check. `app/dedup.py` holds the logic. Two
+decisions in it are worth knowing, because each trades one error for
+another:
+
+- **Only detections from different cameras are merged.** Two people standing
+  close together are reported by one camera as two detections, and merging
+  those would undercount a queue or a group -- the situations occupancy is
+  most used to measure. A camera's own frame is taken as ground truth for
+  how many people it sees.
+- **Each camera contributes only its most recent frame.** Positions from a
+  second ago belong to someone who has since moved, so pooling frames would
+  smear one person into a trail and count them repeatedly.
+
+The merge radius defaults to 1.0m and is tunable per request. It must
+exceed the position error, which is dominated by how far each subject's real
+head height differs from the assumed one -- roughly half a metre for a
+camera a metre above the assumed plane, and much worse for a camera closer
+to it. See the head-height discussion in `docs/aruco_zones.md`; a merge
+radius smaller than that error counts one person twice, and one much larger
+merges two people standing near each other.
+
+Records without a position -- nodes running without `--zones` -- cannot
+contribute to a headcount and are excluded.

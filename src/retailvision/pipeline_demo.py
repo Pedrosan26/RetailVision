@@ -304,12 +304,12 @@ def main() -> None:
                 ]
                 zone_counts = resolver.occupancy(zone_ids)
 
-            for det, track_id, zone_id in zip(detections, track_ids, zone_ids):
+            for det, track_id, zone_id, position in zip(detections, track_ids, zone_ids, world_positions):
                 dwell = counter.dwell_seconds(track_id, timestamp)
                 count = zone_counts.get(zone_id, counter.count) if resolver is not None else counter.count
-                log_detection(det, count=count, dwell_seconds=dwell, zone_id=zone_id)
+                log_detection(det, count=count, dwell_seconds=dwell, zone_id=zone_id, world_position=position)
                 if shipper is not None:
-                    shipper.ship(det, count=count, dwell_seconds=dwell, zone_id=zone_id)
+                    shipper.ship(det, count=count, dwell_seconds=dwell, zone_id=zone_id, world_position=position)
 
             if not args.benchmark or streamer is not None:
                 draw_detections(frame, detections, zone_ids, world_positions)

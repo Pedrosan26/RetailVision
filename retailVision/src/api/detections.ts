@@ -3,16 +3,28 @@
 // free of URL/query-string details.
 
 import { apiGet } from "./client";
-import type { AggregateBucket, AggregateFilters, Detection, DetectionFilters, Occupancy } from "./types";
+import type {
+  AggregateBucket,
+  AggregateFilters,
+  Detection,
+  DetectionFilters,
+  Occupancy,
+  ZoneOccupancy,
+} from "./types";
 
 /** Fetches recent detections, newest first, optionally filtered. */
 export function fetchDetections(filters: DetectionFilters = {}): Promise<Detection[]> {
   return apiGet<Detection[]>("/api/v1/detections", { ...filters });
 }
 
-/** Fetches the latest occupancy count per zone (or camera node, before zones exist). */
+/** Fetches each camera node's latest reported count, one row per camera and zone. */
 export function fetchOccupancy(): Promise<Occupancy[]> {
   return apiGet<Occupancy[]>("/api/v1/occupancy/live");
+}
+
+/** Fetches each zone's headcount, with a person seen by several cameras counted once. */
+export function fetchZoneOccupancy(): Promise<ZoneOccupancy[]> {
+  return apiGet<ZoneOccupancy[]>("/api/v1/occupancy/zones");
 }
 
 /** Fetches time-windowed aggregate rollups. */
