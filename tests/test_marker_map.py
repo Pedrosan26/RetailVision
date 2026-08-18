@@ -255,3 +255,57 @@ class TestProjectToPlane(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestMarkerMapPersistence(unittest.TestCase):
+    """Verify a surveyed map round-trips to disk and is authoritative once loaded."""
+
+    def build(self) -> MarkerMap:
+        """A small hand-built map with a non-default mounting and anchor height."""
+        marker_map = MarkerMap(anchor_id=3, mounting="wall", anchor_height=1.7)
+        for marker_id, (x, y) in FLOOR_MARKERS.items():
+            matrix = np.eye(4)
+            matrix[:3, 3] = [x, y, 1.7]
+            marker_map.poses[marker_id] = matrix
+        return marker_map
+
+    def test_round_trips_through_disk(self) -> None:
+        """Saving and loading preserves every marker pose and the world-frame settings."""
+        import tempfile
+        from pathlib import Path
+
+        original = self.build()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "map.json"
+            original.save(path)
+            loaded = MarkerMap.load(path)
+
+        self.assertEqual(loaded.marker_ids, original.marker_ids)
+        self.assertEqual(loaded.anchor_id, original.anchor_id)
+        self.assertEqual(loaded.mounting, original.mounting)
+        self.assertEqual(loaded.anchor_height, original.anchor_height)
+        for marker_id in original.poses:
+            np.testing.assert_allclose(loaded.poses[marker_id], original.poses[marker_id])
+
+    def test_a_loaded_map_is_frozen(self) -> None:
+        """Nodes load a survey rather than extending it, so their world frames cannot drift apart."""
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "map.json"
+            self.build().save(path)
+            loaded = MarkerMap.load(path)
+
+        self.assertTrue(loaded.frozen)
+        calibration = wide_calibration()
+        estimator = MarkerPoseEstimator(calibration, MARKER_SIZE, allowed_ids=set(FLOOR_MARKERS))
+        before = list(loaded.marker_ids)
+        CameraLocalizer(estimator, loaded).update(
+            render(camera_at((1.0, -1.5, 2.2), (1.0, 0.4, 0.0)), [0, 1], calibration)
+        )
+        self.assertEqual(loaded.marker_ids, before)
+
+    def test_a_freshly_built_map_is_not_frozen(self) -> None:
+        """A map being surveyed must still be able to grow."""
+        self.assertFalse(MarkerMap().frozen)

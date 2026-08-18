@@ -161,6 +161,10 @@ around a room gives a proper polygon; several on one wall do not.
 
 ## Setting it up
 
+Camera-side practicalities -- how many cameras fit on one machine,
+calibration technique, and how to tell a usable calibration from one that
+merely reports a good number -- are in `docs/camera_setup.md`.
+
 1. **Generate and print markers.** One ID per zone corner, all at the same
    physical size, IDs unique across all zones.
 
@@ -267,6 +271,131 @@ as that person's floor footprint, which is what the zone test needs.
   a person visible to both is one person, so their counts are not additive.
   Unchanged from `docs/people_counter.md`.
 
+
+## Placing cameras and markers
+
+Three separate geometric constraints decide whether the numbers coming out
+are trustworthy. All were measured on the deployment this was built
+against.
+
+### How big a marker looks
+
+A marker's apparent side in pixels is `fx * marker_size / distance`. Below
+roughly **50px a side** there are too few pixels to localize corners
+precisely, and beyond about **60 degrees off face-on** the square
+degenerates towards a line and its corners stop being well separated.
+`aruco_pose_test.py` flags both.
+
+Detection keeps working well past those thresholds -- markers are still
+recognised at 22px and 84 degrees. What degrades is the *pose*, and only
+the pose. That distinction matters: a marker being detected is not evidence
+that its position is good.
+
+With a 14cm marker on a 1500px-focal camera:
+
+| Distance | Apparent side | Verdict |
+| --- | --- | --- |
+| 1m | 210px | excellent |
+| 3m | 70px | good |
+| 5m | 42px | marginal |
+| 8m | 26px | unusable for pose |
+
+Range scales linearly with printed size, so 28cm markers double every
+figure above. **Marker size is the cheapest lever available** -- far more
+effective than adding more markers.
+
+### What a small marker costs
+
+Error at a distant marker is amplified by the lever arm out to everything
+mapped through it. Measured on a 32px marker at 7.08m:
+
+```
+1px of corner error   ->  1.79 degrees of camera orientation error
+over 2.89m to the next marker  ->  9.0cm of position error
+which reprojects as   ->  49px
+```
+
+So an observed 24px inconsistency across two mapped markers corresponds to
+**well under one pixel** of corner noise on the far one. Nothing is
+malfunctioning at that point; the marker is simply too small to anchor
+anything.
+
+### Camera height, for markers on the floor
+
+A camera at height `h` and horizontal distance `d` from a floor marker sees
+it `90 - atan(h/d)` degrees off face-on. Cameras at human height therefore
+see floor markers at grazing angles -- 84 degrees was measured for a camera
+0.3m above a marker 3m away, which is unusable.
+
+Maximum horizontal distance that still passes both thresholds, 14cm markers:
+
+| Camera height | Max distance to marker |
+| --- | --- |
+| 1.0m | 1.7m |
+| 1.5m | 2.0m |
+| 2.0m | 2.1m |
+| 3.0m | 1.9m |
+
+Height stops helping past ~2.5m, because the camera then recedes in
+straight-line distance faster than it gains angle. **Upright wall markers
+avoid this constraint entirely**, which is usually the better answer.
+
+### Camera height, for locating people
+
+This is the constraint that most affects zone accuracy, and the least
+obvious.
+
+A person's position is where the ray through their detected face crosses a
+horizontal plane at `--head-height`. If their face is not at that height,
+the error is:
+
+```
+reported distance = true distance x (h_camera - h_assumed) / (h_camera - h_face)
+```
+
+The closer the camera sits to the assumed plane, the more violently that
+diverges. Camera at 1.9m, person truly 3.0m away:
+
+| Their face at | plane 1.6m (30cm below camera) | plane 1.2m (70cm below camera) |
+| --- | --- | --- |
+| assumed -10cm | 2.25m (-0.75m) | 2.62m (-0.38m) |
+| assumed | 3.00m | 3.00m |
+| assumed +10cm | 4.50m (+1.50m) | 3.23m (+0.23m) |
+
+A person 10cm taller than assumed is reported **1.5m further away** with a
+30cm gap, and 0.23m further with a 70cm gap. Someone seated where standing
+was assumed lands metres out.
+
+Two consequences:
+
+- **Set `--head-height` to the posture you are actually measuring.** An
+  office of seated people wants ~1.2m, not the 1.6m standing default. On
+  the setup above that alone cut worst-case error from 1.50m to 0.50m.
+- **Raise the cameras.** At 3.0m the same 10cm head-height error costs
+  0.23m instead of 1.50m. Ceiling mounting is standard for this reason.
+
+Detection noise matters far less: a 1px shift in the face box moves the
+reported position 2-5cm at a 30cm gap, and 1-2cm at 90cm. **Posture
+assumptions dominate, not pixels.**
+
+`pipeline_demo.py` prints each detection's world position beside its box
+and warns when a camera is under 0.75m above the head-height plane.
+
+### Bridging cameras
+
+Two cameras are joined by a marker they can both see *at the same moment*.
+That bridge marker's pose quality sets the accuracy of everything the
+second camera contributes, so **it should be the best-observed marker
+available to both**, not whichever happens to be shared.
+
+A bridge that is far from one camera and steeply angled to the other is the
+worst case, and produces symptoms that look like a broken map: impossible
+camera positions, reprojection errors in the hundreds. Check the per-marker
+lines in `aruco_pose_test.py` before concluding anything else is wrong.
+
+Marker IDs must be unique -- one ID means one physical marker. Two
+printouts of the same ID in different places are fused into a single wrong
+position, silently.
 
 ## Running the live pipeline with zones
 

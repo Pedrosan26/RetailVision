@@ -88,6 +88,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--zones", type=Path, default=None, help="Optional zone definition JSON")
     parser.add_argument(
+        "--save-map",
+        type=Path,
+        default=None,
+        help="Write the surveyed marker map here on exit, for camera nodes to load with pipeline_demo --marker-map",
+    )
+    parser.add_argument(
         "--markers",
         type=int,
         nargs="+",
@@ -415,6 +421,13 @@ def main() -> None:
         for view in views:
             view.release()
         cv2.destroyAllWindows()
+        if args.save_map is not None and marker_map.poses:
+            marker_map.save(args.save_map)
+            print(f"Wrote {args.save_map} with markers {marker_map.marker_ids} (anchor {marker_map.anchor_id}).")
+            if zone_map is not None:
+                pending = {z: zone_map.missing_markers(z) for z in zone_map.zone_ids if zone_map.missing_markers(z)}
+                if pending:
+                    print(f"WARNING: saved while zones are still incomplete: {pending}")
 
 
 if __name__ == "__main__":

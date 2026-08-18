@@ -103,6 +103,13 @@ def parse_args() -> argparse.Namespace:
     # exactly as before and zone_id stays null, as it has since the schema was
     # frozen. See docs/aruco_zones.md.
     parser.add_argument("--zones", type=Path, default=None, help="Zone definition JSON; enables per-zone occupancy and populates zone_id")
+    parser.add_argument(
+        "--marker-map",
+        type=Path,
+        default=None,
+        help="Surveyed marker map from 'aruco_pose_test.py --save-map'. Required with --zones on a multi-camera setup, "
+             "since a node that builds its own map would not share a world frame with the others",
+    )
     parser.add_argument("--calibration", default=None, help="This camera's calibration JSON, required with --zones")
     parser.add_argument("--marker-size", type=float, default=0.14, help="Printed marker side length in meters (default: 0.14)")
     parser.add_argument("--anchor", type=int, default=None, help="Marker ID fixed as the world origin (default: first seen)")
@@ -132,6 +139,8 @@ def parse_args() -> argparse.Namespace:
         parser.error("--stream-frames requires --server-url")
     if args.zones and not args.calibration:
         parser.error("--zones requires --calibration, since zone positions are measured in real units")
+    if args.marker_map and not args.zones:
+        parser.error("--marker-map is only meaningful with --zones")
     return args
 
 
@@ -140,11 +149,25 @@ def open_source(source: str) -> cv2.VideoCapture:
     return cv2.VideoCapture(int(source) if source.isdigit() else source)
 
 
+# A person's position comes from intersecting the ray through their face with a
+# horizontal plane at head height. The closer the camera sits to that plane, the
+# shallower that intersection, and the more a pixel of detection noise moves the
+# result -- at zero separation the ray never meets the plane at all.
+MIN_CAMERA_HEIGHT_ABOVE_PLANE = 0.75
+
+
 def draw_zone_counts(frame, resolver: ZoneResolver, zone_counts: dict[str, int]) -> None:
     """Draw the live per-zone headcount, or why it is unavailable."""
     if resolver.camera_pose is None:
         cv2.putText(frame, "zones: camera not localized", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
         return
+    height_above_plane = float(resolver.camera_pose[2, 3]) - resolver.head_height
+    if height_above_plane < MIN_CAMERA_HEIGHT_ABOVE_PLANE:
+        cv2.putText(
+            frame,
+            f"camera only {height_above_plane:+.2f}m above the {resolver.head_height:.2f}m plane -- positions unreliable",
+            (10, 108), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 255), 2,
+        )
     if not zone_counts:
         waiting = {z: resolver.zone_map.missing_markers(z) for z in resolver.zone_map.zone_ids}
         cv2.putText(frame, f"zones waiting on markers {waiting}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 165, 255), 2)
@@ -153,10 +176,16 @@ def draw_zone_counts(frame, resolver: ZoneResolver, zone_counts: dict[str, int])
         cv2.putText(frame, f"{zone_id}: {count}", (10, 30 + index * 28), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
 
 
-def draw_detections(frame, detections: list[dict], zone_ids: list[str | None] | None = None) -> None:
-    """Draw each detected person's bounding box, predictions, and resolved zone onto the frame."""
+def draw_detections(
+    frame,
+    detections: list[dict],
+    zone_ids: list[str | None] | None = None,
+    world_positions: list[tuple[float, float] | None] | None = None,
+) -> None:
+    """Draw each detected person's bounding box, predictions, resolved zone, and world position onto the frame."""
     zone_ids = zone_ids if zone_ids is not None else [None] * len(detections)
-    for det, zone_id in zip(detections, zone_ids):
+    world_positions = world_positions if world_positions is not None else [None] * len(detections)
+    for det, zone_id, position in zip(detections, zone_ids, world_positions):
         x, y, w, h = det["bbox"]
         conf = det["confidence"]
         cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
@@ -164,8 +193,13 @@ def draw_detections(frame, detections: list[dict], zone_ids: list[str | None] | 
         line2 = f"{det['emotion']} ({conf['emotion']:.2f})"
         cv2.putText(frame, line1, (x, y - 26), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
         cv2.putText(frame, line2, (x, y - 6), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 200, 255), 2)
-        if zone_id is not None:
-            cv2.putText(frame, zone_id, (x, y + h + 18), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
+        # Showing the world position alongside the zone separates "the geometry put
+        # this person somewhere wrong" from "the polygon is in the wrong place",
+        # which look identical from the zone label alone.
+        if position is not None:
+            label = f"({position[0]:+.1f}, {position[1]:+.1f})m {zone_id or 'no zone'}"
+            colour = (255, 0, 0) if zone_id else (0, 165, 255)
+            cv2.putText(frame, label, (x, y + h + 18), cv2.FONT_HERSHEY_SIMPLEX, 0.55, colour, 2)
 
 
 def draw_counter(frame, counter: LineCounter, width: int, height: int) -> None:
@@ -203,9 +237,14 @@ def main() -> None:
     resolver = None
     if args.zones:
         zones = load_zones(args.zones)
-        marker_map = MarkerMap(
-            anchor_id=args.anchor, mounting=args.marker_mounting, anchor_height=args.marker_height
-        )
+        if args.marker_map is not None:
+            marker_map = MarkerMap.load(args.marker_map)
+            print(f"Loaded marker map from {args.marker_map}: markers {marker_map.marker_ids}, anchor {marker_map.anchor_id}.")
+        else:
+            marker_map = MarkerMap(
+                anchor_id=args.anchor, mounting=args.marker_mounting, anchor_height=args.marker_height
+            )
+            print("No --marker-map given; this node will survey its own map, which will not match other nodes.")
         estimator = MarkerPoseEstimator(
             CameraCalibration.load(args.calibration),
             args.marker_size,
@@ -255,9 +294,14 @@ def main() -> None:
             # running total -- a headcount cannot drift the way a net count can.
             zone_ids: list[str | None] = [None] * len(detections)
             zone_counts: dict[str, int] = {}
+            world_positions: list[tuple[float, float] | None] = [None] * len(detections)
             if resolver is not None:
                 resolver.update(frame)
-                zone_ids = resolver.resolve(bboxes)
+                world_positions = [resolver.world_position(bbox) for bbox in bboxes]
+                zone_ids = [
+                    None if position is None else resolver.zone_map.zone_for(position)
+                    for position in world_positions
+                ]
                 zone_counts = resolver.occupancy(zone_ids)
 
             for det, track_id, zone_id in zip(detections, track_ids, zone_ids):
@@ -268,7 +312,7 @@ def main() -> None:
                     shipper.ship(det, count=count, dwell_seconds=dwell, zone_id=zone_id)
 
             if not args.benchmark or streamer is not None:
-                draw_detections(frame, detections, zone_ids)
+                draw_detections(frame, detections, zone_ids, world_positions)
                 if resolver is None:
                     draw_counter(frame, counter, width, height)
                 else:

@@ -36,7 +36,9 @@ problem.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -121,6 +123,10 @@ class MarkerMap:
         self.mounting = mounting
         self.anchor_height = anchor_height
         self.poses: dict[int, np.ndarray] = {}
+        # A map loaded from disk is authoritative: every camera node must agree on
+        # where the markers are, and letting each one keep adding its own would
+        # let their world frames drift apart silently.
+        self.frozen = False
 
     @property
     def up_axis(self) -> int:
@@ -146,6 +152,39 @@ class MarkerMap:
     def clear(self) -> None:
         """Forget every mapped marker, so the next observation re-anchors the world frame."""
         self.poses.clear()
+
+    def save(self, path: str | Path) -> None:
+        """Write the mapped markers and world-frame settings to JSON, for other processes to load.
+
+        Surveying a room is a setup step, not something each camera should repeat
+        on startup. One process that can see everything builds the map once; every
+        camera node then loads the same file and localizes against it, which is
+        also what lets nodes on separate machines share a world frame at all.
+        """
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "anchor_id": self.anchor_id,
+            "mounting": self.mounting,
+            "anchor_height": self.anchor_height,
+            "markers": {str(marker_id): pose.tolist() for marker_id, pose in sorted(self.poses.items())},
+        }
+        path.write_text(json.dumps(payload, indent=2) + "\n")
+
+    @classmethod
+    def load(cls, path: str | Path) -> MarkerMap:
+        """Read a surveyed marker map back, frozen so loading nodes cannot diverge from it."""
+        payload = json.loads(Path(path).read_text())
+        marker_map = cls(
+            anchor_id=payload["anchor_id"],
+            mounting=payload["mounting"],
+            anchor_height=payload["anchor_height"],
+        )
+        marker_map.poses = {
+            int(marker_id): np.array(pose, dtype=np.float64) for marker_id, pose in payload["markers"].items()
+        }
+        marker_map.frozen = True
+        return marker_map
 
     def position(self, marker_id: int) -> np.ndarray | None:
         """Return a mapped marker's (x, y, z) world position in meters, or None if it isn't mapped yet."""
@@ -196,7 +235,7 @@ class CameraLocalizer:
         if not candidates:
             return Localization()
 
-        if not self.marker_map.poses:
+        if not self.marker_map.poses and not self.marker_map.frozen:
             self._anchor(candidates)
 
         camera_pose, error = self._best_camera_pose(candidates)
@@ -333,6 +372,8 @@ class CameraLocalizer:
 
     def _extend(self, camera_pose: np.ndarray, candidates: dict[int, list[MarkerPose]]) -> list[int]:
         """Map any newly visible markers, picking the orientation that lies in the plane the mapped markers share."""
+        if self.marker_map.frozen:
+            return []
         learned = []
         for marker_id, poses in candidates.items():
             if marker_id in self.marker_map:
