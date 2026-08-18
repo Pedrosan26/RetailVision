@@ -103,9 +103,17 @@ charting library: there are three chart forms, all small, and a library
 would bring its own theming layer to reconcile with these tokens plus a
 dependency to keep current. Revisit if the chart set grows much past this.
 
-`HistoricalCharts` owns the time range, and the range carries its own bucket
-size -- the two cannot be chosen independently, since 5-minute buckets over
-a week would be thousands of points on a chart 720 pixels wide.
+`HistoricalCharts` puts the period and the grouping in a side panel as two
+controls rather than a row of fixed presets, since the useful question is
+often "the last week, by day" and a preset list has to guess which pairings
+matter.
+
+They are not fully independent, though: an hourly view of a month is 720
+points on a chart 720 pixels wide, and a day grouped by day is a single
+point, which is a number rather than a series. Pairings outside roughly
+3-200 points are shown disabled with the reason, and changing the period
+moves the grouping to a usable one rather than leaving a selection checked
+that is not what is being drawn.
 
 
 ## Design tokens
