@@ -19,7 +19,7 @@ originating ticket), each line should be parsed independently.
 | Field | Type | Description |
 |---|---|---|
 | `timestamp` | string | ISO 8601 UTC timestamp of the detection event. |
-| `zone_id` | string \| null | ID of the store zone the person was detected in. `null` until zone configuration lands. |
+| `zone_id` | string \| null | ID of the zone the person was standing in. `null` when the pipeline runs without `--zones`, and also when zones are configured but the camera cannot currently see a mapped marker -- so "unknown" stays distinct from "outside every zone". |
 | `count` | integer \| null | Net occupancy (entries minus exits so far) at the moment of the detection event, from `LineCounter`. `null` if no counter was supplied. |
 | `age_group` | string | Predicted age bracket, one of the age classifier's classes (see `docs/datasets/utkface.md`). |
 | `gender` | string | Predicted gender, one of the gender classifier's classes. |

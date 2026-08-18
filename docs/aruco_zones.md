@@ -262,8 +262,43 @@ as that person's floor footprint, which is what the zone test needs.
   are placed slightly differently for the same true floor position. Small
   relative to zone dimensions, but it is a real source of error near a
   boundary.
-- **Not yet wired into the live pipeline.** This is spike work: the
-  modules and the test script exist, but `pipeline_demo.py` still uses the
-  virtual-line counter, and nothing yet populates `zone_id` in the logged
-  records. Re-identifying the same person across zones or across cameras
-  remains future work, unchanged from `docs/people_counter.md`.
+- **Re-identification across cameras is still future work.** Two cameras
+  watching one zone each count the people they can see; nobody notices that
+  a person visible to both is one person, so their counts are not additive.
+  Unchanged from `docs/people_counter.md`.
+
+
+## Running the live pipeline with zones
+
+Zones are opt-in. Without `--zones` the pipeline behaves exactly as it did
+before, using the virtual-line counter and logging `zone_id` as null.
+
+```
+PYTHONPATH=. ./venv/bin/python3 -m src.retailvision.pipeline_demo \
+    --source 0 \
+    --zones config/zones.json \
+    --calibration calibration/camera_0.json \
+    --marker-size 0.14 --anchor 3 \
+    --marker-mounting wall --marker-height 1.70
+```
+
+`--calibration` is required alongside `--zones`, because zone positions are
+measured in real units and there is no way to get those from pixels alone.
+
+What changes in the output:
+
+- **`zone_id`** is the zone that detection was standing in, or null if the
+  camera could not see a mapped marker at that moment. Null therefore means
+  "not known", which is deliberately distinct from being outside every
+  zone.
+- **`count`** becomes that zone's live headcount rather than the virtual
+  line's running total. This is the point of the whole exercise: a
+  headcount is recomputed every frame and cannot drift, whereas a net count
+  is permanently wrong after a single missed crossing.
+- The preview labels each detection with its zone and lists the per-zone
+  counts, replacing the counting line overlay.
+
+Each camera node runs its own process with its own calibration. Nodes
+sharing a zone all report against the same `zone_id`, which is what lets
+the server group them -- though see the limitation above about their counts
+not being additive while re-identification is missing.

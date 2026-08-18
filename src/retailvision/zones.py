@@ -33,7 +33,14 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from .marker_map import MarkerMap
+from .marker_map import (
+    DEFAULT_HEAD_HEIGHT_METERS,
+    CameraLocalizer,
+    Localization,
+    MarkerMap,
+    project_to_plane,
+)
+from .marker_pose import MarkerPoseEstimator
 
 MIN_ZONE_MARKERS = 3
 
@@ -115,6 +122,74 @@ class ZoneMap:
         counts = {zone_id: 0 for zone_id in self.ready_zone_ids()}
         for point in points.values():
             zone_id = self.zone_for(point)
+            if zone_id in counts:
+                counts[zone_id] += 1
+        return counts
+
+
+class ZoneResolver:
+    """Answers which zone a detected person is standing in, for one camera.
+
+    Owns the whole chain a live pipeline needs -- localizing the camera
+    against the shared marker map each frame, back-projecting a detection onto
+    a horizontal plane at head height, and testing that position against the
+    zone polygons -- so callers hand over a frame and bounding boxes and get
+    zone identities back.
+
+    A camera that cannot currently see a mapped marker resolves nothing rather
+    than guessing. Returning None keeps the "not known" case distinct from
+    "outside every zone", which the log schema also distinguishes.
+    """
+
+    def __init__(
+        self,
+        estimator: MarkerPoseEstimator,
+        marker_map: MarkerMap,
+        zone_map: "ZoneMap",
+        head_height: float = DEFAULT_HEAD_HEIGHT_METERS,
+    ) -> None:
+        """Bind a camera's pose estimator and the shared marker map to the zones being measured."""
+        self.localizer = CameraLocalizer(estimator, marker_map)
+        self.zone_map = zone_map
+        self.head_height = head_height
+        self.camera_pose: np.ndarray | None = None
+
+    def update(self, frame: np.ndarray) -> Localization:
+        """Re-localize the camera from the markers visible in this frame."""
+        result = self.localizer.update(frame)
+        self.camera_pose = result.camera_pose
+        return result
+
+    def world_position(self, bbox: tuple[int, int, int, int]) -> tuple[float, float] | None:
+        """Return the world floor position of a detection's bounding box, or None if the camera is not localized.
+
+        The box centre is used rather than its base: this pipeline detects
+        faces, so the bottom edge is a chin rather than a pair of feet, and the
+        ray is intersected with a plane at head height instead of the floor.
+        """
+        if self.camera_pose is None:
+            return None
+        x, y, width, height = bbox
+        return project_to_plane(
+            (x + width / 2.0, y + height / 2.0),
+            self.camera_pose,
+            self.localizer.estimator.calibration,
+            plane_z=self.head_height,
+        )
+
+    def zone_for_bbox(self, bbox: tuple[int, int, int, int]) -> str | None:
+        """Return the zone a detection falls in, or None if it is outside them all or the camera is not localized."""
+        position = self.world_position(bbox)
+        return None if position is None else self.zone_map.zone_for(position)
+
+    def resolve(self, bboxes: list[tuple[int, int, int, int]]) -> list[str | None]:
+        """Return one zone ID (or None) per bounding box, in the same order."""
+        return [self.zone_for_bbox(bbox) for bbox in bboxes]
+
+    def occupancy(self, zone_ids: list[str | None]) -> dict[str, int]:
+        """Count how many of the resolved detections fall in each zone, for every ready zone."""
+        counts = {zone_id: 0 for zone_id in self.zone_map.ready_zone_ids()}
+        for zone_id in zone_ids:
             if zone_id in counts:
                 counts[zone_id] += 1
         return counts
