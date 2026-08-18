@@ -21,16 +21,16 @@ export function DistributionBars({ distribution, emptyLabel = "No data in this r
   const total = entries.reduce((sum, [, count]) => sum + count, 0);
 
   if (entries.length === 0 || total === 0) {
-    return <div className="py-6 text-center text-sm text-slate-400">{emptyLabel}</div>;
+    return <div className="py-6 text-center text-sm text-[var(--app-ink-muted)]">{emptyLabel}</div>;
   }
 
   const max = Math.max(...entries.map(([, count]) => count));
 
   return (
-    <div className="viz-root flex flex-col gap-2">
+    <div className="flex flex-col gap-2">
       {entries.map(([name, count]) => (
         <div key={name} className="grid grid-cols-[7rem_1fr_4.5rem] items-center gap-3">
-          <span className="truncate text-xs text-slate-600 dark:text-slate-300" title={name}>
+          <span className="truncate text-xs text-[var(--app-ink-secondary)]" title={name}>
             {name}
           </span>
           <div className="h-4 overflow-hidden rounded-sm" style={{ background: "var(--viz-grid)" }}>
@@ -39,9 +39,9 @@ export function DistributionBars({ distribution, emptyLabel = "No data in this r
               style={{ width: `${Math.max((count / max) * 100, 1)}%`, background: "var(--viz-series-1)" }}
             />
           </div>
-          <span className="text-right text-xs tabular-nums text-slate-700 dark:text-slate-200">
+          <span className="text-right text-xs tabular-nums text-[var(--app-ink)]">
             {count}
-            <span className="ml-1 text-slate-400">{Math.round((count / total) * 100)}%</span>
+            <span className="ml-1 text-[var(--app-ink-muted)]">{Math.round((count / total) * 100)}%</span>
           </span>
         </div>
       ))}

@@ -1,5 +1,5 @@
-// Polls recent detections for the Overview page's activity feed and
-// (later, RV-034) the full detections table.
+// Polls recent detections, for the Overview page's activity feed and the
+// Detections page's table. Both want the same data with different filters.
 
 import { useQuery } from "@tanstack/react-query";
 import { fetchDetections } from "../api/detections";

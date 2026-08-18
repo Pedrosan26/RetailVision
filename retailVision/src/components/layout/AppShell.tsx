@@ -7,10 +7,14 @@ import { Sidebar } from "./Sidebar";
 /** Wraps every route with the shared sidebar layout. */
 export function AppShell() {
   return (
-    <div className="flex min-h-screen bg-slate-50 dark:bg-slate-900">
+    <div className="flex min-h-screen bg-[var(--app-page)]">
       <Sidebar />
-      <main className="flex-1 overflow-x-auto px-8 py-6">
-        <Outlet />
+      {/* Capped so lines of text and wide tables stay readable on a large
+          display, rather than stretching the full width of the window. */}
+      <main className="flex-1 overflow-x-auto px-8 py-7">
+        <div className="mx-auto max-w-6xl">
+          <Outlet />
+        </div>
       </main>
     </div>
   );

@@ -14,7 +14,7 @@ export function CameraFeedGrid() {
   if (isPending) return <LoadingState label="Loading cameras…" />;
   if (isError) return <ErrorState message="Couldn't load cameras -- is the server running?" />;
   if (data.length === 0) {
-    return <div className="py-8 text-center text-sm text-slate-400">No camera nodes reporting yet.</div>;
+    return <div className="py-8 text-center text-sm text-[var(--app-ink-muted)]">No camera nodes reporting yet.</div>;
   }
 
   const cameraNodeIds = [...new Set(data.map((occupancy) => occupancy.camera_node_id))];
@@ -23,7 +23,7 @@ export function CameraFeedGrid() {
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {cameraNodeIds.map((cameraNodeId) => (
         <div key={cameraNodeId}>
-          <div className="mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">{cameraNodeId}</div>
+          <div className="mb-1 text-xs font-medium text-[var(--app-ink-muted)]">{cameraNodeId}</div>
           <CameraFeed cameraNodeId={cameraNodeId} />
         </div>
       ))}

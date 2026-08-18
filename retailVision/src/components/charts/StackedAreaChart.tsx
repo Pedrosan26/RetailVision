@@ -39,7 +39,7 @@ export function StackedAreaChart({ labels, series, spanHours, unitLabel = "detec
 
   if (labels.length === 0 || series.length === 0) {
     return (
-      <div className="flex h-[220px] items-center justify-center text-sm text-slate-400">
+      <div className="flex h-[220px] items-center justify-center text-sm text-[var(--app-ink-muted)]">
         No data in this range.
       </div>
     );
@@ -67,7 +67,7 @@ export function StackedAreaChart({ labels, series, spanHours, unitLabel = "detec
   const tickEvery = Math.max(1, Math.ceil(labels.length / 6));
 
   return (
-    <div className="viz-root">
+    <div>
       <svg
         viewBox={`0 0 ${width} ${HEIGHT}`}
         className="w-full"
@@ -161,22 +161,22 @@ export function StackedAreaChart({ labels, series, spanHours, unitLabel = "detec
       <div className="mt-2 min-h-[3.5rem] text-xs">
         {hover !== null ? (
           <div>
-            <div className="font-medium text-slate-700 dark:text-slate-200">{formatMoment(labels[hover])}</div>
+            <div className="font-medium text-[var(--app-ink)]">{formatMoment(labels[hover])}</div>
             <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
               {bands.map((band, seriesIndex) => (
-                <span key={band.name} className="inline-flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
+                <span key={band.name} className="inline-flex items-center gap-1.5 text-[var(--app-ink-secondary)]">
                   <span
                     aria-hidden
                     className="inline-block h-2.5 w-2.5 rounded-full"
                     style={{ background: band.colour }}
                   />
                   {band.name}
-                  <span className="tabular-nums font-medium text-slate-900 dark:text-slate-100">
+                  <span className="tabular-nums font-medium text-[var(--app-ink)]">
                     {series[seriesIndex].values[hover] ?? 0}
                   </span>
                 </span>
               ))}
-              <span className="text-slate-500 dark:text-slate-400">
+              <span className="text-[var(--app-ink-muted)]">
                 total <span className="tabular-nums font-medium">{totals[hover]}</span> {unitLabel}
               </span>
             </div>
@@ -186,20 +186,20 @@ export function StackedAreaChart({ labels, series, spanHours, unitLabel = "detec
             {bands.map((band, seriesIndex) => {
               const total = series[seriesIndex].values.reduce((sum, value) => sum + value, 0);
               return (
-                <span key={band.name} className="inline-flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
+                <span key={band.name} className="inline-flex items-center gap-1.5 text-[var(--app-ink-secondary)]">
                   <span
                     aria-hidden
                     className="inline-block h-2.5 w-2.5 rounded-full"
                     style={{ background: band.colour }}
                   />
                   {band.name}
-                  <span className="tabular-nums font-medium text-slate-900 dark:text-slate-100">{total}</span>
+                  <span className="tabular-nums font-medium text-[var(--app-ink)]">{total}</span>
                 </span>
               );
             })}
           </div>
         ) : (
-          <div className="text-slate-400">Hover for values.</div>
+          <div className="text-[var(--app-ink-muted)]">Hover for values.</div>
         )}
       </div>
     </div>

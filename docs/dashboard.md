@@ -106,3 +106,44 @@ dependency to keep current. Revisit if the chart set grows much past this.
 `HistoricalCharts` owns the time range, and the range carries its own bucket
 size -- the two cannot be chosen independently, since 5-minute buckets over
 a week would be thousands of points on a chart 720 pixels wide.
+
+
+## Design tokens
+
+Colours live as CSS custom properties on `:root` in `src/index.css`, split
+into interface roles (`--app-*`) and chart roles (`--viz-*`), and components
+reference them as Tailwind arbitrary values (`bg-[var(--app-surface)]`).
+One class therefore covers light and dark, rather than every element
+carrying a `dark:` twin, and a colour changes in exactly one place.
+
+The neutrals carry a slight warm bias rather than the blue-grey most UI
+defaults to, which leaves the blue accent doing the work of standing out
+instead of competing with the background. Interface and chart colours come
+from the same set deliberately: a chart wearing a different palette to the
+panel around it reads as two systems bolted together.
+
+Both modes are chosen, not derived. Dark is the same hues re-stepped for a
+dark surface -- inverting a light palette drifts the series colours out of
+the lightness band where they stay distinguishable to colour-blind readers.
+The categorical order is fixed by slot and never cycled, so a series keeps
+its colour when a filter changes how many series are on screen.
+
+`src/components/common/ui.tsx` holds the shared shapes -- `Card`,
+`PageHeader`, `StatTile`, `Badge`, `EmptyState`, `SegmentedControl` -- so
+panel treatment and spacing are defined once rather than as repeated
+Tailwind strings.
+
+## Pages
+
+- **Overview** (`/`) -- live per-zone headcount, camera feeds, recent
+  activity. Ordered by how often each is looked at rather than by how the
+  system is built.
+- **Zones** (`/zones`) -- one zone at a time: current headcount, which
+  cameras are contributing it, and that zone's history. The per-camera
+  figures sit beside the headcount rather than behind it, because a zone
+  reading four looks equally healthy whether three cameras agree or two have
+  silently stopped reporting.
+- **Detections** (`/detections`) -- the raw event log, filterable by camera,
+  zone and time range, paged client-side. One row is one detection event,
+  not one person; a table of rows otherwise invites being read as a list of
+  people.

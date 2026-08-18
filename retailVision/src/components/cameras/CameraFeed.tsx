@@ -22,7 +22,7 @@ export function CameraFeed({ cameraNodeId }: { cameraNodeId: string }) {
 
   if (isOffline) {
     return (
-      <div className="flex aspect-video w-full items-center justify-center rounded-md border border-slate-200 bg-slate-100 text-xs text-slate-400 dark:border-slate-800 dark:bg-slate-900">
+      <div className="flex aspect-video w-full items-center justify-center rounded-md border border-[var(--app-line)] bg-[var(--app-page)] text-xs text-[var(--app-ink-muted)]">
         {cameraNodeId} offline -- retrying…
       </div>
     );
@@ -33,7 +33,7 @@ export function CameraFeed({ cameraNodeId }: { cameraNodeId: string }) {
       key={retryKey}
       src={`${API_BASE}/api/v1/frames/${cameraNodeId}/stream`}
       alt={`Live view from ${cameraNodeId}`}
-      className="aspect-video w-full rounded-md border border-slate-200 bg-slate-100 object-cover dark:border-slate-800 dark:bg-slate-900"
+      className="aspect-video w-full rounded-md border border-[var(--app-line)] bg-[var(--app-page)] object-cover"
       onLoad={() => setIsOffline(false)}
       onError={handleError}
     />

@@ -1,64 +1,46 @@
-// Landing page: live occupancy across all camera nodes/zones, plus a
-// recent-activity feed.
+// Landing page: what is happening right now.
+//
+// Ordered by how often it is looked at rather than by how the system is
+// built -- the headcount first, then the cameras producing it, then the raw
+// event stream. History lives on the Zones page, where it can be scoped to
+// one area; repeating it here would make the live view slower to read.
 
 import { CameraFeedGrid } from "../components/cameras/CameraFeedGrid";
-import { HistoricalCharts } from "../components/charts/HistoricalCharts";
 import { RecentActivityFeed } from "../components/detections/RecentActivityFeed";
-import { OccupancyGrid } from "../components/occupancy/OccupancyGrid";
+import { Card, CardHeader, PageHeader, SectionHeading } from "../components/common/ui";
 import { ZoneOccupancyGrid } from "../components/occupancy/ZoneOccupancyGrid";
 
-/** Renders the Overview page: live camera feeds, occupancy grid, and recent activity feed. */
+/** Renders the Overview page: live per-zone occupancy, camera feeds, and recent activity. */
 export function OverviewPage() {
   return (
     <div className="flex flex-col gap-8">
-      <div>
-        <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">Overview</h1>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Live occupancy and recent detections across all camera nodes.
-        </p>
-      </div>
+      <PageHeader
+        title="Overview"
+        description="Live occupancy across every marked zone, and what each camera is currently seeing."
+      />
 
       <section>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-          Live camera feeds
-        </h2>
-        <CameraFeedGrid />
-      </section>
-
-      <section>
-        <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+        <SectionHeading hint="Someone visible to several cameras is counted once.">
           People per zone
-        </h2>
-        <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
-          Someone visible to several cameras is counted once.
-        </p>
+        </SectionHeading>
         <ZoneOccupancyGrid />
       </section>
 
       <section>
-        <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-          Latest per camera
-        </h2>
-        <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
-          What each node last reported, before merging.
-        </p>
-        <OccupancyGrid />
+        <SectionHeading hint="Frames leave a camera node only while it runs with --stream-frames.">
+          Camera feeds
+        </SectionHeading>
+        <CameraFeedGrid />
       </section>
 
       <section>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-          History
-        </h2>
-        <HistoricalCharts />
-      </section>
-
-      <section>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-          Recent activity
-        </h2>
-        <div className="rounded-lg border border-slate-200 bg-white px-5 dark:border-slate-800 dark:bg-slate-950">
-          <RecentActivityFeed />
-        </div>
+        <SectionHeading>Recent activity</SectionHeading>
+        <Card>
+          <CardHeader title="Latest detections" description="Newest first, across all cameras." />
+          <div className="px-4">
+            <RecentActivityFeed />
+          </div>
+        </Card>
       </section>
     </div>
   );

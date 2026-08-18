@@ -1,25 +1,60 @@
 @import "tailwindcss";
 
-/* Chart tokens.
+/* One token system for the whole dashboard.
  *
- * Charts are written against roles rather than raw hex, so the light/dark
- * values swap in one place. Both modes are chosen deliberately -- the dark
- * column is the same hues re-stepped for a dark surface, not an inversion,
- * because an inverted palette drifts out of the lightness band where colours
- * stay distinguishable to colour-blind readers.
+ * The neutrals carry a slight warm bias rather than the blue-grey most UI
+ * defaults to, which keeps the blue accent doing the work of standing out
+ * instead of competing with the background. Chart colours and interface
+ * chrome are drawn from the same set deliberately: a chart wearing a
+ * different palette to the panel around it reads as two systems bolted
+ * together, which is what this replaced.
  *
- * The categorical order is fixed and assigned by slot, never cycled: a series
- * keeps its colour when a filter changes how many series are on screen.
+ * Both modes are chosen, not derived. Dark is the same hues re-stepped for a
+ * dark surface -- inverting a light palette drifts the series colours out of
+ * the lightness band where they stay distinguishable to colour-blind readers.
+ *
+ * Components reference these as arbitrary values (bg-[var(--app-surface)]),
+ * so one class covers both modes and the values live in exactly one place.
+ * They are declared on :root rather than a wrapper class so a chart nested
+ * anywhere inherits them without needing to be wrapped.
  */
-.viz-root {
+:root {
   color-scheme: light;
 
+  /* Planes, back to front. */
+  --app-page: #f4f3ef;
+  --app-surface: #fcfcfb;
+  --app-raised: #ffffff;
+
+  /* Ink. */
+  --app-ink: #16150f;
+  --app-ink-secondary: #52514e;
+  --app-ink-muted: #898781;
+
+  /* Lines. Hairlines, deliberately quieter than the text they separate. */
+  --app-line: #e5e3dc;
+  --app-line-strong: #d4d2c9;
+
+  /* Accent, matching categorical slot 1 so a highlighted control and a
+     leading data series are recognisably the same blue. */
+  --app-accent: #2a78d6;
+  --app-accent-ink: #ffffff;
+  --app-accent-wash: #eaf1fc;
+
+  /* Status. Reserved -- never reused as a series colour, and always paired
+     with a label so meaning never rests on hue alone. */
+  --app-good: #0ca30c;
+  --app-warning: #fab219;
+  --app-critical: #d03b3b;
+  --app-critical-wash: #fdeceb;
+
+  /* Chart roles. */
   --viz-surface: #fcfcfb;
-  --viz-ink: #0b0b0b;
+  --viz-ink: #16150f;
   --viz-ink-secondary: #52514e;
   --viz-ink-muted: #898781;
-  --viz-grid: #e1e0d9;
-  --viz-axis: #c3c2b7;
+  --viz-grid: #e5e3dc;
+  --viz-axis: #d4d2c9;
 
   --viz-series-1: #2a78d6;
   --viz-series-2: #eb6834;
@@ -29,20 +64,62 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  .viz-root {
+  :root {
     color-scheme: dark;
 
+    --app-page: #0d0d0c;
+    --app-surface: #1a1a19;
+    --app-raised: #232322;
+
+    --app-ink: #f5f4ef;
+    --app-ink-secondary: #c3c2b7;
+    --app-ink-muted: #898781;
+
+    --app-line: #2c2c2a;
+    --app-line-strong: #3b3b38;
+
+    --app-accent: #3987e5;
+    --app-accent-ink: #0d0d0c;
+    --app-accent-wash: #16283f;
+
+    --app-good: #0ca30c;
+    --app-warning: #fab219;
+    --app-critical: #e66767;
+    --app-critical-wash: #2e1a1a;
+
     --viz-surface: #1a1a19;
-    --viz-ink: #ffffff;
+    --viz-ink: #f5f4ef;
     --viz-ink-secondary: #c3c2b7;
     --viz-ink-muted: #898781;
     --viz-grid: #2c2c2a;
-    --viz-axis: #383835;
+    --viz-axis: #3b3b38;
 
     --viz-series-1: #3987e5;
     --viz-series-2: #d95926;
     --viz-series-3: #199e70;
     --viz-series-4: #c98500;
     --viz-series-5: #d55181;
+  }
+}
+
+body {
+  background: var(--app-page);
+  color: var(--app-ink);
+}
+
+/* Keyboard focus stays visible everywhere; the accent ring is the same blue
+   as the active nav item, so "this is where you are" reads consistently. */
+:focus-visible {
+  outline: 2px solid var(--app-accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
   }
 }

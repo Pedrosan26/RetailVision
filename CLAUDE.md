@@ -54,7 +54,7 @@ Each machine reads from its own default camera (`cv2.VideoCapture(0)`) or a loca
 
 ## Dashboard
 
-`retailVision/` is the React + TypeScript + Vite dashboard (own `package.json` — unrelated to the pipeline/server Python subprojects), reading from the server's endpoints documented above. Stack: Tailwind for styling, TanStack Query for server state (fetching/caching/polling the read endpoints), Zustand for client/UI state only (selected camera node/zone, time-range filter — never server data), `react-router-dom` for routing. Local dev: `cd retailVision && nvm use && npm install && npm run dev` (expects the server running at `VITE_API_BASE_URL`, default `http://localhost:8000`).
+`retailVision/` is the React + TypeScript + Vite dashboard (own `package.json` — unrelated to the pipeline/server Python subprojects), reading from the server's endpoints documented above. Colours are CSS custom properties on `:root` (`--app-*` for chrome, `--viz-*` for charts) referenced as Tailwind arbitrary values, so one class covers light and dark — there are no `dark:` variants and no default-palette classes left; see `docs/dashboard.md`. Stack: Tailwind for styling, TanStack Query for server state (fetching/caching/polling the read endpoints), Zustand for client/UI state only (selected camera node/zone, time-range filter — never server data), `react-router-dom` for routing. Local dev: `cd retailVision && nvm use && npm install && npm run dev` (expects the server running at `VITE_API_BASE_URL`, default `http://localhost:8000`).
 
 Requires **Node 22** (pinned via `.nvmrc`) — the Vite 8/oxlint toolchain here needs Node `^20.19 || >=22.12`, and an older Node doesn't error clearly, it just silently skips installing their platform-specific native bindings (`npm install` "succeeds" but `npm run dev`/`lint` then crash on a missing binding). If you hit that, it's this, not a corrupted install — switch Node versions rather than reinstalling.
 
@@ -71,14 +71,14 @@ retailVision/
                   OccupancyGrid, OccupancyCard -- what each camera node last reported, unmerged
       charts/     StackedAreaChart, DistributionBars, HistoricalCharts -- hand-rolled SVG over /aggregates
       detections/ RecentActivityFeed -- compact recent-detections list for the Overview page
-      common/     LoadingState, ErrorState
+      common/     LoadingState, ErrorState, ui.tsx (Card/PageHeader/StatTile/Badge/EmptyState/SegmentedControl)
     pages/      OverviewPage, DetectionsPage, ZonesPage, NotFoundPage
 ```
 
 Pages:
 - `OverviewPage` — the landing route (`/`); live occupancy grid plus a recent-activity feed. Fully wired to the server's `/occupancy/live` and `/detections` endpoints.
-- `DetectionsPage` (`/detections`) — placeholder for now (routed, shows "Coming soon"). Will hold the full filterable/paginated detections table (by camera node, zone, time range) once built out.
-- `ZonesPage` (`/zones`) — placeholder for now (routed, shows "Coming soon"). Will hold per-zone views (occupancy history, dwell/engagement charts). `zone_id` is now populated by camera nodes running with `--zones`, so `/occupancy/live` groups by real zones once nodes are configured that way.
+- `DetectionsPage` (`/detections`) — the raw event log: filterable by camera node, zone and time range, paged client-side. One row is one detection event, not one person.
+- `ZonesPage` (`/zones`) — one zone at a time: deduplicated headcount, which cameras contribute it, and that zone's history from `/aggregates?zone_id=`.
 - `NotFoundPage` — catch-all 404 for unmatched routes.
 
 ## Conventions

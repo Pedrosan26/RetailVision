@@ -10,6 +10,7 @@ import { useMemo, useState } from "react";
 import { useAggregates } from "../../hooks/useAggregates";
 import { ErrorState } from "../common/ErrorState";
 import { LoadingState } from "../common/LoadingState";
+import { Card, CardHeader, SegmentedControl } from "../common/ui";
 import { DistributionBars } from "./DistributionBars";
 import { StackedAreaChart } from "./StackedAreaChart";
 
@@ -46,34 +47,27 @@ function totalDistribution(buckets: Array<Record<string, number>>): Record<strin
   return totals;
 }
 
-/** Renders the historical charts with a shared time-range selector. */
-export function HistoricalCharts() {
+/** Renders the historical charts with a shared time-range selector, optionally scoped to one zone. */
+export function HistoricalCharts({ zoneId }: { zoneId?: string } = {}) {
   const [range, setRange] = useState<Range>(RANGES[2]);
 
   const since = useMemo(
     () => new Date(Date.now() - range.hours * 3600_000).toISOString(),
     [range],
   );
-  const { data, isPending, isError } = useAggregates({ window: range.window, since });
+  const { data, isPending, isError } = useAggregates({
+    window: range.window,
+    since,
+    zone_id: zoneId,
+  });
 
   const selector = (
-    <div className="flex gap-1" role="group" aria-label="Time range">
-      {RANGES.map((option) => (
-        <button
-          key={option.label}
-          type="button"
-          onClick={() => setRange(option)}
-          aria-pressed={option.label === range.label}
-          className={
-            option.label === range.label
-              ? "rounded-md bg-slate-900 px-2.5 py-1 text-xs font-medium text-white dark:bg-slate-100 dark:text-slate-900"
-              : "rounded-md px-2.5 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-          }
-        >
-          {option.label}
-        </button>
-      ))}
-    </div>
+    <SegmentedControl
+      ariaLabel="Time range"
+      options={RANGES.map((option) => ({ value: option.label, label: option.label }))}
+      value={range.label}
+      onChange={(label) => setRange(RANGES.find((option) => option.label === label) ?? RANGES[2])}
+    />
   );
 
   let body: React.ReactNode;
@@ -87,21 +81,20 @@ export function HistoricalCharts() {
 
     body = (
       <div className="flex flex-col gap-6">
-        <figure className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-          <figcaption className="mb-2 text-sm font-medium text-slate-700 dark:text-slate-200">
-            Detections over time
-          </figcaption>
+        <Card>
+          <CardHeader title="Detections over time" />
+          <div className="p-4">
           <StackedAreaChart
             labels={labels}
             series={[{ name: "detections", values: data.map((bucket) => bucket.detection_count) }]}
             spanHours={range.hours}
           />
-        </figure>
+          </div>
+        </Card>
 
-        <figure className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-          <figcaption className="mb-2 text-sm font-medium text-slate-700 dark:text-slate-200">
-            Emotion over time
-          </figcaption>
+        <Card>
+          <CardHeader title="Emotion over time" />
+          <div className="p-4">
           <StackedAreaChart
             labels={labels}
             series={emotionNames.map((name) => ({
@@ -110,17 +103,22 @@ export function HistoricalCharts() {
             }))}
             spanHours={range.hours}
           />
-        </figure>
+          </div>
+        </Card>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <figure className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-            <figcaption className="mb-3 text-sm font-medium text-slate-700 dark:text-slate-200">Age group</figcaption>
-            <DistributionBars distribution={totalDistribution(data.map((b) => b.age_group_distribution))} />
-          </figure>
-          <figure className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-            <figcaption className="mb-3 text-sm font-medium text-slate-700 dark:text-slate-200">Gender</figcaption>
-            <DistributionBars distribution={totalDistribution(data.map((b) => b.gender_distribution))} />
-          </figure>
+          <Card>
+            <CardHeader title="Age group" />
+            <div className="p-4">
+              <DistributionBars distribution={totalDistribution(data.map((b) => b.age_group_distribution))} />
+            </div>
+          </Card>
+          <Card>
+            <CardHeader title="Gender" />
+            <div className="p-4">
+              <DistributionBars distribution={totalDistribution(data.map((b) => b.gender_distribution))} />
+            </div>
+          </Card>
         </div>
       </div>
     );
@@ -129,7 +127,7 @@ export function HistoricalCharts() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <p className="text-xs text-slate-500 dark:text-slate-400">
+        <p className="text-xs text-[var(--app-ink-muted)]">
           Counts every detection event, so one person present for a while contributes many.
         </p>
         {selector}
