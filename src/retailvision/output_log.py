@@ -21,9 +21,14 @@ zone_id is. engagement_score is still a null placeholder pending the
 zone-emotion correlation work. count
 and dwell_seconds are populated once a counter is supplied: count is
 occupancy at the moment of the detection event, dwell_seconds is how long
-the detected track has currently been present. The schema is frozen at
-these 8 fields so later modules can populate the remaining ones without
-changing the log's shape.
+the detected track has currently been present.
+
+track_id groups the records belonging to one person while they are in
+view, so that a person present for a while is countable as one person
+rather than as one detection per frame (see person_track.py). It is
+random per track and per process run: it carries no identity, survives no
+restart, and is not comparable between cameras -- recognising the same
+person in two cameras at once is the server's spatial job, not this ID's.
 """
 
 import json
@@ -35,6 +40,7 @@ DEFAULT_LOG_PATH = REPO_ROOT / "data" / "inference_log.json"
 
 SCHEMA_FIELDS = (
     "timestamp",
+    "track_id",
     "zone_id",
     "world_x",
     "world_y",
@@ -54,10 +60,12 @@ def build_log_record(
     dwell_seconds: float | None = None,
     zone_id: str | None = None,
     world_position: tuple[float, float] | None = None,
+    track_id: str | None = None,
 ) -> dict:
     """Build one schema-conforming, anonymized log record from a process_frame() detection."""
     return {
         "timestamp": timestamp or datetime.now(timezone.utc).isoformat(),
+        "track_id": track_id,
         "zone_id": zone_id,
         "world_x": None if world_position is None else float(world_position[0]),
         "world_y": None if world_position is None else float(world_position[1]),
@@ -78,6 +86,7 @@ def log_detection(
     dwell_seconds: float | None = None,
     zone_id: str | None = None,
     world_position: tuple[float, float] | None = None,
+    track_id: str | None = None,
 ) -> None:
     """Append one anonymized log record for a single detection event to log_path."""
     record = build_log_record(
@@ -87,6 +96,7 @@ def log_detection(
         dwell_seconds=dwell_seconds,
         zone_id=zone_id,
         world_position=world_position,
+        track_id=track_id,
     )
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with open(log_path, "a") as f:

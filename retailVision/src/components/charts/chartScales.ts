@@ -81,3 +81,15 @@ export function formatMoment(iso: string): string {
     minute: "2-digit",
   });
 }
+
+/** Formats the span a bucket covers, so a tooltip names the window rather than just the instant it opened. */
+export function formatBucketRange(iso: string, bucketHours: number): string {
+  const start = new Date(iso);
+  // A daily bucket is identified by its date; printing both ends just repeats it.
+  if (bucketHours >= 24) {
+    return start.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  }
+  const end = new Date(start.getTime() + bucketHours * 3600_000);
+  const time = (date: Date) => date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  return `${start.toLocaleDateString(undefined, { month: "short", day: "numeric" })}, ${time(start)} – ${time(end)}`;
+}

@@ -36,6 +36,12 @@ class DetectionEvent(Base):
     camera_node_id: Mapped[str] = mapped_column(String, nullable=False)
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     ingested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    # Groups the rows belonging to one person while they were in view of one
+    # camera, so counting people means counting distinct track_ids rather than
+    # rows. Only unique within a camera node and a run of its process: the same
+    # person seen by two cameras carries two different track_ids, which is what
+    # the world position exists to reconcile.
+    track_id: Mapped[str | None] = mapped_column(String, nullable=True)
     zone_id: Mapped[str | None] = mapped_column(String, nullable=True)
     # The person's floor position in the zone's shared world frame, in meters.
     # Every camera watching a zone reports in the same frame, which is what lets

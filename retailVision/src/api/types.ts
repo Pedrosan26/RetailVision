@@ -6,6 +6,7 @@ export interface Detection {
   id: number;
   camera_node_id: string;
   timestamp: string;
+  track_id: string | null;
   zone_id: string | null;
   world_x: number | null;
   world_y: number | null;
@@ -37,6 +38,8 @@ export interface ZoneOccupancy {
 export interface AggregateBucket {
   bucket_start: string;
   detection_count: number;
+  /** Distinct people behind those events; a person present across a bucket contributes many events but one person. */
+  unique_people: number;
   age_group_distribution: Record<string, number>;
   gender_distribution: Record<string, number>;
   emotion_distribution: Record<string, number>;
@@ -57,4 +60,9 @@ export interface AggregateFilters {
   since?: string;
   until?: string;
   zone_id?: string;
+  // Each is "any of these" within its dimension, and "and" across dimensions.
+  // An omitted or empty list means that dimension is not filtered on.
+  age_group?: string[];
+  gender?: string[];
+  emotion?: string[];
 }

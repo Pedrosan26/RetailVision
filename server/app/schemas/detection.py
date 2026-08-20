@@ -15,6 +15,9 @@ class DetectionRecord(BaseModel):
     """Validates one anonymized detection record against the log schema."""
 
     timestamp: datetime
+    # Groups one person's records together. Optional so a node that has not
+    # been upgraded keeps ingesting unchanged.
+    track_id: str | None = None
     zone_id: str | None = None
     # Optional so that camera nodes running without zones, and nodes not yet
     # upgraded, keep validating against this model unchanged.
@@ -49,6 +52,7 @@ class DetectionOut(BaseModel):
     id: int
     camera_node_id: str
     timestamp: datetime
+    track_id: str | None
     zone_id: str | None
     world_x: float | None
     world_y: float | None
@@ -85,6 +89,10 @@ class AggregateBucket(BaseModel):
 
     bucket_start: datetime
     detection_count: int
+    # Distinct people behind those events. A person present across a bucket
+    # contributes several events but one person, so the two diverge and the
+    # difference is meaningful rather than noise.
+    unique_people: int
     age_group_distribution: dict[str, int]
     gender_distribution: dict[str, int]
     emotion_distribution: dict[str, int]

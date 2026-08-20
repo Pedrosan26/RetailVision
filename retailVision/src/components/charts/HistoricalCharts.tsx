@@ -7,8 +7,15 @@
 // though: an hourly view of a month is 720 points on a chart 720 pixels wide,
 // which is a smear rather than a reading, so those combinations are offered
 // but disabled with the reason given.
+//
+// The demographic filters narrow which detections are counted at all, server
+// side, so every chart on the page answers the same question. Their options
+// come from an unfiltered query over the same range rather than from the
+// filtered data -- otherwise selecting one emotion would remove every other
+// emotion from the list and strand the reader with no way back.
 
 import { useMemo, useState } from "react";
+import type { AggregateBucket } from "../../api/types";
 import { useAggregates } from "../../hooks/useAggregates";
 import { ErrorState } from "../common/ErrorState";
 import { LoadingState } from "../common/LoadingState";
@@ -18,6 +25,7 @@ import { StackedAreaChart } from "./StackedAreaChart";
 
 type RangeKey = "24h" | "7d" | "30d";
 type Granularity = "hour" | "day";
+type Dimension = "age_group" | "gender" | "emotion";
 
 const RANGES: Array<{ key: RangeKey; label: string; hours: number }> = [
   { key: "24h", label: "Last 24 hours", hours: 24 },
@@ -29,6 +37,14 @@ const GRANULARITIES: Array<{ key: Granularity; label: string; window: string; ho
   { key: "hour", label: "Per hour", window: "1h", hours: 1 },
   { key: "day", label: "Per day", window: "1d", hours: 24 },
 ];
+
+const DIMENSIONS: Array<{ key: Dimension; label: string; distribution: keyof AggregateBucket }> = [
+  { key: "age_group", label: "Age", distribution: "age_group_distribution" },
+  { key: "gender", label: "Gender", distribution: "gender_distribution" },
+  { key: "emotion", label: "Emotion", distribution: "emotion_distribution" },
+];
+
+const NO_FILTERS: Record<Dimension, string[]> = { age_group: [], gender: [], emotion: [] };
 
 // Past this the points are narrower than the marks drawn on them, so the chart
 // stops being readable however correct the data is. Below the minimum there is
@@ -68,10 +84,33 @@ function pointCount(rangeHours: number, granularityHours: number): number {
   return Math.ceil(rangeHours / granularityHours);
 }
 
-/** Renders the historical charts alongside a range panel, optionally scoped to one zone. */
+/** The largest category in a distribution, or null when it is empty. */
+function topEntry(distribution: Record<string, number>): [string, number] | null {
+  const entries = Object.entries(distribution);
+  if (entries.length === 0) return null;
+  return entries.reduce((best, entry) => (entry[1] > best[1] ? entry : best));
+}
+
+/** Builds the extra tooltip rows shared by every chart: how long people stayed and who they were. */
+function commonDetails(bucket: AggregateBucket): Array<{ label: string; value: string }> {
+  const rows: Array<{ label: string; value: string }> = [
+    { label: "Events behind it", value: String(bucket.detection_count) },
+  ];
+  if (bucket.avg_dwell_seconds !== null) {
+    rows.push({ label: "Avg dwell", value: `${bucket.avg_dwell_seconds.toFixed(1)}s` });
+  }
+  const age = topEntry(bucket.age_group_distribution);
+  if (age) rows.push({ label: "Top age", value: `${age[0]} (${age[1]})` });
+  const gender = topEntry(bucket.gender_distribution);
+  if (gender) rows.push({ label: "Top gender", value: `${gender[0]} (${gender[1]})` });
+  return rows;
+}
+
+/** Renders the historical charts alongside a range and filter panel, optionally scoped to one zone. */
 export function HistoricalCharts({ zoneId }: { zoneId?: string } = {}) {
   const [rangeKey, setRangeKey] = useState<RangeKey>("7d");
   const [granularity, setGranularity] = useState<Granularity>("day");
+  const [filters, setFilters] = useState<Record<Dimension, string[]>>(NO_FILTERS);
 
   const range = RANGES.find((r) => r.key === rangeKey) ?? RANGES[1];
   const grain = GRANULARITIES.find((g) => g.key === granularity) ?? GRANULARITIES[1];
@@ -80,13 +119,27 @@ export function HistoricalCharts({ zoneId }: { zoneId?: string } = {}) {
     () => new Date(Date.now() - range.hours * 3600_000).toISOString(),
     [range],
   );
-  const { data, isPending, isError } = useAggregates({
-    window: grain.window,
-    since,
-    zone_id: zoneId,
-  });
+
+  const scope = { window: grain.window, since, zone_id: zoneId };
+  const { data, isPending, isError } = useAggregates({ ...scope, ...filters });
+  // Same range, no demographic filters: the stable list of what exists to pick
+  // from. Identical to the query above whenever nothing is filtered, so the
+  // cache serves both from one request in the common case.
+  const { data: unfiltered } = useAggregates(scope);
 
   const points = pointCount(range.hours, grain.hours);
+  const activeCount = DIMENSIONS.reduce((sum, d) => sum + filters[d.key].length, 0);
+
+  /** Adds or removes one value from a dimension's filter. */
+  function toggle(dimension: Dimension, value: string) {
+    setFilters((current) => {
+      const chosen = current[dimension];
+      return {
+        ...current,
+        [dimension]: chosen.includes(value) ? chosen.filter((v) => v !== value) : [...chosen, value],
+      };
+    });
+  }
 
   const panel = (
     <Card className="lg:sticky lg:top-7">
@@ -154,11 +207,54 @@ export function HistoricalCharts({ zoneId }: { zoneId?: string } = {}) {
           })}
         </fieldset>
 
-        <p className="border-t border-[var(--app-line)] pt-3 text-xs text-[var(--app-ink-muted)]">
+        {DIMENSIONS.map((dimension) => {
+          const options = categoryNames(
+            (unfiltered ?? []).map((bucket) => bucket[dimension.distribution] as Record<string, number>),
+          );
+          if (options.length === 0) return null;
+          return (
+            <fieldset key={dimension.key} className="flex flex-col gap-1.5 border-t border-[var(--app-line)] pt-4">
+              <legend className="mb-1.5 text-[0.7rem] font-medium uppercase tracking-[0.08em] text-[var(--app-ink-muted)]">
+                {dimension.label}
+              </legend>
+              {options.map((option) => (
+                <label
+                  key={option}
+                  className="flex cursor-pointer items-center gap-2 text-sm text-[var(--app-ink-secondary)]"
+                >
+                  <input
+                    type="checkbox"
+                    checked={filters[dimension.key].includes(option)}
+                    onChange={() => toggle(dimension.key, option)}
+                    className="accent-[var(--app-accent)]"
+                  />
+                  {option}
+                </label>
+              ))}
+            </fieldset>
+          );
+        })}
+
+        <div className="border-t border-[var(--app-line)] pt-3">
+          <button
+            type="button"
+            onClick={() => setFilters(NO_FILTERS)}
+            disabled={activeCount === 0}
+            className={`w-full rounded-md border px-3 py-1.5 text-sm font-medium transition-colors ${
+              activeCount === 0
+                ? "cursor-not-allowed border-[var(--app-line)] text-[var(--app-ink-muted)]"
+                : "border-[var(--app-accent)] bg-[var(--app-accent-wash)] text-[var(--app-accent)]"
+            }`}
+          >
+            {activeCount === 0 ? "Showing everything" : `Clear ${activeCount} filter${activeCount === 1 ? "" : "s"}`}
+          </button>
+        </div>
+
+        <p className="text-xs text-[var(--app-ink-muted)]">
           {points} point{points === 1 ? "" : "s"}, one per {granularity}.
         </p>
         <p className="text-xs text-[var(--app-ink-muted)]">
-          Counts every detection event, so one person present for a while contributes many.
+          People are counted once per camera. Anyone visible to two cameras still counts twice here.
         </p>
       </div>
     </Card>
@@ -173,15 +269,31 @@ export function HistoricalCharts({ zoneId }: { zoneId?: string } = {}) {
     const labels = data.map((bucket) => bucket.bucket_start);
     const emotionNames = categoryNames(data.map((bucket) => bucket.emotion_distribution));
 
+    // The detections chart is a single undifferentiated series, so its tooltip
+    // is where the emotional mix for that bucket has to appear.
+    const detectionDetails = data.map((bucket) => [
+      ...emotionNames
+        .filter((name) => (bucket.emotion_distribution[name] ?? 0) > 0)
+        .map((name) => ({ label: name, value: String(bucket.emotion_distribution[name]) })),
+      ...commonDetails(bucket),
+    ]);
+    const emotionDetails = data.map(commonDetails);
+
     body = (
       <div className="flex flex-col gap-6">
         <Card>
-          <CardHeader title="Detections over time" />
+          <CardHeader
+            title="People over time"
+            description="Distinct people, not detection events -- someone who stayed a while counts once."
+          />
           <div className="p-4">
             <StackedAreaChart
               labels={labels}
-              series={[{ name: "detections", values: data.map((bucket) => bucket.detection_count) }]}
+              series={[{ name: "people", values: data.map((bucket) => bucket.unique_people) }]}
               spanHours={range.hours}
+              bucketHours={grain.hours}
+              unitLabel="people"
+              details={detectionDetails}
             />
           </div>
         </Card>
@@ -196,6 +308,8 @@ export function HistoricalCharts({ zoneId }: { zoneId?: string } = {}) {
                 values: data.map((bucket) => bucket.emotion_distribution[name] ?? 0),
               }))}
               spanHours={range.hours}
+              bucketHours={grain.hours}
+              details={emotionDetails}
             />
           </div>
         </Card>

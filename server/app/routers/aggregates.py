@@ -55,10 +55,18 @@ def bucket_events(events: list[DetectionEvent], since: datetime, window: timedel
         bucket = buckets[index]
         dwell_values = [e.dwell_seconds for e in bucket if e.dwell_seconds is not None]
         engagement_values = [e.engagement_score for e in bucket if e.engagement_score is not None]
+        # A person is one track within one camera node, so the pair is the
+        # identity. Rows from a node too old to send a track_id fall back to
+        # counting as one person each, which is what they were before.
+        people = {
+            (e.camera_node_id, e.track_id) if e.track_id else (e.camera_node_id, f"row-{e.id}")
+            for e in bucket
+        }
         result.append(
             AggregateBucket(
                 bucket_start=since + index * window,
                 detection_count=len(bucket),
+                unique_people=len(people),
                 age_group_distribution=dict(Counter(e.age_group for e in bucket)),
                 gender_distribution=dict(Counter(e.gender for e in bucket)),
                 emotion_distribution=dict(Counter(e.emotion for e in bucket)),
@@ -75,6 +83,13 @@ async def get_aggregates(
     since: datetime | None = None,
     until: datetime | None = None,
     zone_id: str | None = None,
+    # Repeatable, so several values of one dimension read as "any of these"
+    # (?emotion=happy&emotion=neutral) while different dimensions read as
+    # "and". Omitting a dimension entirely means it is not filtered on, which
+    # is what clearing a filter in the dashboard sends.
+    age_group: list[str] | None = Query(None),
+    gender: list[str] | None = Query(None),
+    emotion: list[str] | None = Query(None),
     db: AsyncSession = Depends(get_db),
 ) -> list[AggregateBucket]:
     """Return time-windowed aggregates over detection events in [since, until] (default: last 24h)."""
@@ -93,6 +108,13 @@ async def get_aggregates(
     )
     if zone_id:
         stmt = stmt.where(DetectionEvent.zone_id == zone_id)
+    for column, values in (
+        (DetectionEvent.age_group, age_group),
+        (DetectionEvent.gender, gender),
+        (DetectionEvent.emotion, emotion),
+    ):
+        if values:
+            stmt = stmt.where(column.in_(values))
 
     result = await db.execute(stmt)
     events = result.scalars().all()

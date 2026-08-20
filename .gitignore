@@ -231,3 +231,8 @@ calibration/
 
 # Live zone definitions; config/zones.example.json is the committed template
 config/zones.json
+
+# Surveyed marker map -- describes where the markers physically are in one
+# room, so it is specific to that deployment (regenerate via
+# scripts/aruco_pose_test.py --save-map)
+config/marker_map.json

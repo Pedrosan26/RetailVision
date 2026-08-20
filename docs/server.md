@@ -72,10 +72,31 @@ that point.
 
 ### `GET /api/v1/aggregates`
 
-Time-windowed rollups: detection count, age/gender/emotion distribution,
-and average dwell/engagement per bucket. Query params: `window` (e.g.
+Time-windowed rollups: detection count, distinct people, age/gender/emotion
+distribution, and average dwell/engagement per bucket. Query params: `window` (e.g.
 `5m`, `1h`, `24h`; default `5m`), `since`/`until` (default: last 24h),
-`zone_id`.
+`zone_id`, and the repeatable demographic filters `age_group`, `gender`
+and `emotion`.
+
+The demographic filters narrow which events are counted at all, before
+bucketing. Repeating one reads as "any of these"
+(`?emotion=Happy&emotion=Neutral`); different dimensions intersect
+(`?age_group=18-40&gender=Male` is both). Omitting a dimension does not
+filter on it, which is what the dashboard sends when its filters are
+cleared -- so "show everything" is the absence of a parameter rather
+than a list of every known value, and a label the classifier has never
+emitted never has to be enumerated anywhere.
+
+`unique_people` counts distinct `(camera_node_id, track_id)` pairs, not
+rows. The pair is the identity because a node's track IDs are only unique
+within that node and within one run of its process, so the same ID arriving
+from two nodes is two people. Rows with no `track_id` -- from a node that
+predates the field -- count as one person each, which is exactly what they
+meant before it existed.
+
+This is per-camera, so someone standing where two cameras overlap still
+counts twice here. Collapsing that is a spatial question, answered from the
+shared world frame by `/occupancy/zones`, not by the track ID.
 
 Bucketing happens in Python, not via TimescaleDB's `time_bucket()` SQL
 function: one portable filtered query fetches matching rows, then

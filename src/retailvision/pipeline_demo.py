@@ -41,6 +41,7 @@ from .marker_map import DEFAULT_HEAD_HEIGHT_METERS, FLOOR_MOUNTING, WALL_MOUNTIN
 from .marker_pose import MarkerPoseEstimator
 from .inference import InferencePipeline
 from .output_log import log_detection
+from .person_track import TrackRegistry, reported_detection
 from .remote_log import RemoteLogShipper
 from .zones import ZoneMap, ZoneResolver, load_zones
 from .tracking import CentroidTracker, bbox_centroid
@@ -144,9 +145,42 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
-def open_source(source: str) -> cv2.VideoCapture:
-    """Open a camera by index or a video file by path."""
-    return cv2.VideoCapture(int(source) if source.isdigit() else source)
+# A camera comes up at its own default resolution, which is rarely the one its
+# calibration was captured at. Focal length is measured in pixels, so it only
+# describes the camera at that resolution -- running at another one rescales
+# every distance instead of failing, and the marker map was surveyed at the
+# calibrated resolution, so the two must agree or no position lands in a zone.
+CAPTURE_WARMUP_TIMEOUT = 5.0
+
+
+def capture_resolution(capture: cv2.VideoCapture) -> tuple[int, int]:
+    """The resolution the source is currently delivering."""
+    return (int(capture.get(cv2.CAP_PROP_FRAME_WIDTH)), int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT)))
+
+
+def wait_for_first_frame(capture: cv2.VideoCapture, timeout: float = CAPTURE_WARMUP_TIMEOUT) -> bool:
+    """Block until the source delivers a frame after a resolution change, or the timeout expires."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        ok, _ = capture.read()
+        if ok:
+            return True
+        time.sleep(0.1)
+    return False
+
+
+def open_source(source: str, calibration: CameraCalibration | None = None) -> cv2.VideoCapture:
+    """Open a camera by index or a video file by path, at the resolution its calibration was captured at."""
+    capture = cv2.VideoCapture(int(source) if source.isdigit() else source)
+    # Only a live camera has a resolution to ask for; a file delivers whatever
+    # it was recorded at.
+    if calibration is None or not source.isdigit() or not capture.isOpened():
+        return capture
+    if capture_resolution(capture) != tuple(calibration.image_size):
+        capture.set(cv2.CAP_PROP_FRAME_WIDTH, calibration.image_size[0])
+        capture.set(cv2.CAP_PROP_FRAME_HEIGHT, calibration.image_size[1])
+        wait_for_first_frame(capture)
+    return capture
 
 
 # A person's position comes from intersecting the ray through their face with a
@@ -215,12 +249,22 @@ def draw_counter(frame, counter: LineCounter, width: int, height: int) -> None:
 def main() -> None:
     """Run the inference pipeline over a camera or video source until 'q', EOF, or --duration elapses."""
     args = parse_args()
-    cap = open_source(args.source)
+    # Loaded before the source is opened, so the camera can be asked for the
+    # resolution the calibration describes. The same object then feeds the pose
+    # estimator, so the frames and the intrinsics cannot disagree.
+    calibration = CameraCalibration.load(args.calibration) if args.calibration else None
+    cap = open_source(args.source, calibration)
     if not cap.isOpened():
         raise RuntimeError(f"Could not open source: {args.source}")
 
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    width, height = capture_resolution(cap)
+    if calibration is not None and (width, height) != tuple(calibration.image_size):
+        print(
+            f"WARNING: source is running at {width}x{height} but was calibrated at "
+            f"{calibration.image_size[0]}x{calibration.image_size[1]}. Focal length is in pixels, "
+            "so every distance will be wrong and no detection will land inside a zone. "
+            "Some cameras only run at their native resolution -- recalibrate this one there."
+        )
 
     line_position = args.line_position
     if line_position is None:
@@ -228,6 +272,7 @@ def main() -> None:
 
     pipeline = InferencePipeline()
     tracker = CentroidTracker()
+    registry = TrackRegistry()
     counter = LineCounter(axis=args.line_axis, position=line_position, entry_direction=args.line_direction)
     shipper = None
     if args.server_url:
@@ -246,7 +291,7 @@ def main() -> None:
             )
             print("No --marker-map given; this node will survey its own map, which will not match other nodes.")
         estimator = MarkerPoseEstimator(
-            CameraCalibration.load(args.calibration),
+            calibration,
             args.marker_size,
             allowed_ids={m for zone in zones for m in zone.marker_ids},
         )
@@ -289,6 +334,15 @@ def main() -> None:
             for track_id, event in counter.update(tracks, timestamp):
                 print(f"  Track {track_id} {event} -- occupancy now {counter.count}")
 
+            # Fold this frame into each person's running identity vote before
+            # anything is counted or reported, so both are answered about
+            # people rather than about detections.
+            registry.retire(set(track_ids))
+            people = [
+                registry.observe(track_id, det, timestamp)
+                for track_id, det in zip(track_ids, detections)
+            ]
+
             # With zones configured, each detection carries the zone it is standing
             # in and that zone's live headcount, rather than the line counter's
             # running total -- a headcount cannot drift the way a net count can.
@@ -302,14 +356,35 @@ def main() -> None:
                     None if position is None else resolver.zone_map.zone_for(position)
                     for position in world_positions
                 ]
-                zone_counts = resolver.occupancy(zone_ids)
+                # Occupancy counts confirmed people, so a one-frame false
+                # positive never appears in a headcount it would inflate.
+                zone_counts = resolver.occupancy(
+                    [zone for zone, person in zip(zone_ids, people) if person.confirmed]
+                )
 
-            for det, track_id, zone_id, position in zip(detections, track_ids, zone_ids, world_positions):
+            # One record per person per change, not one per person per frame.
+            # A track is reported only once its age/gender vote has settled,
+            # and then only when its emotion or zone moves, or the heartbeat
+            # falls due.
+            for det, track_id, zone_id, position, person in zip(
+                detections, track_ids, zone_ids, world_positions, people
+            ):
+                if not person.should_emit(zone_id, timestamp):
+                    continue
                 dwell = counter.dwell_seconds(track_id, timestamp)
-                count = zone_counts.get(zone_id, counter.count) if resolver is not None else counter.count
-                log_detection(det, count=count, dwell_seconds=dwell, zone_id=zone_id, world_position=position)
+                present = registry.confirmed_count()
+                count = zone_counts.get(zone_id, present) if resolver is not None else present
+                reported = reported_detection(det, person)
+                log_detection(
+                    reported, count=count, dwell_seconds=dwell, zone_id=zone_id,
+                    world_position=position, track_id=person.track_id,
+                )
                 if shipper is not None:
-                    shipper.ship(det, count=count, dwell_seconds=dwell, zone_id=zone_id, world_position=position)
+                    shipper.ship(
+                        reported, count=count, dwell_seconds=dwell, zone_id=zone_id,
+                        world_position=position, track_id=person.track_id,
+                    )
+                person.mark_emitted(zone_id, timestamp)
 
             if not args.benchmark or streamer is not None:
                 draw_detections(frame, detections, zone_ids, world_positions)

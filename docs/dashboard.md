@@ -115,6 +115,63 @@ point, which is a number rather than a series. Pairings outside roughly
 moves the grouping to a usable one rather than leaving a selection checked
 that is not what is being drawn.
 
+The same panel carries age, gender and emotion filters, which are applied
+server-side so every chart on the page answers the same question. Their
+options come from a second, unfiltered query over the same range rather
+than from the filtered data: reading them off the filtered response would
+mean selecting one emotion removed every other emotion from the list,
+stranding the reader with no way back. Whenever nothing is filtered the
+two queries have identical keys, so TanStack Query serves both from one
+request. A single button clears every dimension at once, and states which
+of the two it is doing -- "Showing everything" when nothing is set.
+
+Hovering a time chart opens a floating box beside the cursor. It floats
+rather than writing into a fixed block below the chart because the
+reader's eye is already on the bucket they are asking about.
+
+The hover reads the cursor's vertical position as well as its horizontal
+one, so pointing at a band asks about *that series* rather than about the
+bucket as a whole: the box leads with that one series -- its count, its
+share of the bucket, and how it moved since the previous bucket -- the
+other bands drop to a low opacity, and the focused band's own upper edge
+is stroked in its colour. Sweeping sideways along a band therefore traces
+that series' history.
+
+That is the question a stacked chart is otherwise bad at answering. A
+band's *thickness* is easy to read, but its *position* is not, because
+every band above the first rides on the ones beneath it, so its outline
+carries their movement as well as its own. Isolating one band removes
+that borrowed motion.
+
+Pointing above the stack, where no band lies, falls back to summarizing
+the whole bucket: total plus every series with its share. A single-series
+chart never dims, having nothing to disambiguate.
+
+Both modes end with the average dwell and leading age/gender for that
+bucket. On the detections chart, whose single series has no colour to
+read, the tooltip is also where that bucket's emotional mix appears.
+
+Hovering is momentary, so the legend entries are also buttons that pin one
+series. A reader following a single emotion should not have to keep the
+cursor inside a band that may be thin or interrupted to hold their place:
+a pinned series stays isolated while the cursor goes elsewhere, including
+off the chart. Hovering another band still previews it, and the pin takes
+back over as soon as the cursor leaves -- so it is a way to look around
+without losing what was deliberately chosen. Clicking the pinned entry
+again releases it, so the control that turned isolation on is the one that
+turns it off, and a "Show all" appears alongside while anything is pinned.
+
+The pin is held by series *name*, not position. The demographic filters
+change which series exist, and an index would quietly come to mean a
+different emotion; a name that is no longer present simply stops matching,
+which is the right outcome for a series that has been filtered away.
+
+The legend is permanent rather than something the tooltip replaces
+-- identity must not rest on colour alone whether or not anyone is
+hovering -- and dims in step with the bands so the focused series stays
+identifiable there too. Making it the isolation control also hands that
+interaction to keyboard users, who have no hover to offer.
+
 
 ## Design tokens
 

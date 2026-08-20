@@ -50,6 +50,7 @@ async def get_detections(
             id=event.id,
             camera_node_id=event.camera_node_id,
             timestamp=as_utc(event.timestamp),
+            track_id=event.track_id,
             zone_id=event.zone_id,
             world_x=event.world_x,
             world_y=event.world_y,
