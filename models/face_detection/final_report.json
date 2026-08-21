@@ -1,5 +1,5 @@
 {
-  "weights": "C:\\Users\\Pedro Sanchez\\Documents\\Github\\RetailVision\\models\\face_detection\\final.pt",
+  "weights": "models/face_detection/final.pt",
   "overall_test_split_metrics": {
     "mAP50": 0.7463,
     "mAP50_95": 0.4042,
@@ -27,5 +27,5 @@
   },
   "min_hard_recall_threshold": 0.711,
   "hard_recall_threshold_passed": false,
-  "loss_curve_plot": "C:\\Users\\Pedro Sanchez\\Documents\\Github\\RetailVision\\models\\face_detection\\final_loss_curves.png"
+  "loss_curve_plot": "models/face_detection/final_loss_curves.png"
 }

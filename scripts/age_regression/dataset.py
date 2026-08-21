@@ -3,7 +3,7 @@ dataset.py
 
 PyTorch Dataset that reads an age-regression manifest CSV (image path,
 continuous age) and applies the same augmentation philosophy documented in
-docs/datasets/utkface.md (flip safe, no vertical flip, mild rotation, mild
+the classifiers' (flip safe, no vertical flip, mild rotation, mild
 color jitter that doesn't distort skin tone) via torchvision transforms.
 """
 

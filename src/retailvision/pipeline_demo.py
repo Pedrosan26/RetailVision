@@ -5,7 +5,7 @@ End-to-end demo of the RetailVision pipeline: opens a camera or a
 pre-recorded video file, runs each frame through InferencePipeline (face
 detection plus age/gender/emotion classification), tracks each detected
 face across frames and counts virtual-line crossings (see tracking.py,
-counter.py), shows a live preview with each detected person's bounding
+see counter.py), shows a live preview with each detected person's bounding
 box, predictions, the counting line, and the running occupancy drawn, and
 appends an anonymized log record for each detection (see output_log.py).
 Optionally also ships the same records to a central server in real time
@@ -102,7 +102,7 @@ def parse_args() -> argparse.Namespace:
     )
     # Marker-based zones. All optional: without --zones the pipeline behaves
     # exactly as before and zone_id stays null, as it has since the schema was
-    # frozen. See docs/aruco_zones.md.
+    # frozen. See the README's marker-based zones section.
     parser.add_argument("--zones", type=Path, default=None, help="Zone definition JSON; enables per-zone occupancy and populates zone_id")
     parser.add_argument(
         "--marker-map",

@@ -1,5 +1,5 @@
 {
-  "weights": "/Users/pedrosan/Desktop/Github/RetailVision/models/emotion/final.pt",
+  "weights": "models/emotion/final.pt",
   "top_k_accuracy": {
     "top1_accuracy": 0.6969,
     "top5_accuracy": 0.9887
@@ -57,5 +57,5 @@
       "support": 831
     }
   },
-  "loss_curve_plot": "/Users/pedrosan/Desktop/Github/RetailVision/models/emotion/final_loss_curves.png"
+  "loss_curve_plot": "models/emotion/final_loss_curves.png"
 }

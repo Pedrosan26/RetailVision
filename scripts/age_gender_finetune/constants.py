@@ -6,7 +6,7 @@ classifiers from the original yolov8n-cls checkpoint (rather than continuing
 from the baseline weights) so augmentation and a lower learning rate
 get a clean run instead of compounding the mild overfitting already present
 in baseline_age.pt past ~epoch 70. Augmentation values match the strategy
-decided in docs/datasets/utkface.md but not applied to the baseline, which
+decided during dataset preparation but not applied to the baseline, which
 needed to be a faithful "defaults" floor.
 """
 

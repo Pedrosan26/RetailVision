@@ -11,7 +11,7 @@ Hyperparameters reuse the age/gender fine-tune's recipe (epochs=60,
 batch=32, SGD, lr0=0.005, patience=15) as a reasonable first fine-tuning
 iteration for a similarly-sized single yolov8n-cls classification task.
 
-Augmentation follows the same philosophy as docs/datasets/utkface.md, with
+Augmentation follows the same philosophy as the age/gender fine-tune, with
 one dataset-specific adjustment: FER-2013 images are grayscale, so hue
 (`hsv_h`) and saturation (`hsv_s`) jitter are omitted entirely — a
 zero-saturation pixel has no hue to shift, so those two would be pure
@@ -25,7 +25,7 @@ class, not just the target Neutral/Happy pair. FER-2013 is natively 48x48
 model's 224 input — augmentation that occludes/distorts a fixed fraction
 of the image removes proportionally far more signal here. `erasing`
 specifically is suspected of blanking out the small mouth/eyebrow regions
-that distinguish "neutral" from "sad" (see docs/models/emotion_finetune.md
+that distinguish "neutral" from "sad" (see RESULTS.md
 for the confusion-matrix evidence behind this). See that doc for the full
 iteration-1 writeup and rationale.
 """

@@ -1,5 +1,5 @@
 {
-  "weights": "/Users/pedrosan/Desktop/Github/RetailVision/models/age_gender/regression_age.pt",
+  "weights": "models/age_gender/regression_age.pt",
   "overall_mae": 3.6494,
   "per_age_group_mae": {
     "0-17": {

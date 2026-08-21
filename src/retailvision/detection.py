@@ -5,9 +5,8 @@ Handles face detection for the RetailVision pipeline. This is the first
 detection stage: it takes a single camera frame and returns the bounding
 boxes of any faces found in it, using a YOLOv8 detection-mode model
 trained from scratch on WIDER FACE and fine-tuned for retail camera
-conditions (see docs/models/widerface_baseline.md and
-docs/models/widerface_finetune.md for training details, and
-docs/model_evaluation.md for the real-world evaluation that motivated
+conditions (see RESULTS.md for the training results and for the
+real-world evaluation that motivated
 replacing this stage's original Haar cascade implementation).
 """
 

@@ -13,8 +13,7 @@ which is the practical problem the marker map exists to solve.
 Occupancy is a point-in-polygon test against a person's floor position, so
 it reports who is inside right now rather than accumulating crossings.
 That removes the drift the virtual-line counter is prone to, where a
-missed crossing permanently skews the running total (see
-docs/people_counter.md).
+missed crossing permanently skews the running total (see counter.py).
 
 The polygon is the convex hull of the markers' floor positions, not a
 ring visited in any configured order. Markers get taped up in whatever

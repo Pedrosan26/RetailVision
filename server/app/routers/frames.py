@@ -9,7 +9,7 @@ visualization convenience, not part of the frozen anonymized detection
 record. This is a deliberate, temporary trade-off against the project's
 edge-inference privacy design (raw frames otherwise never leave a camera
 node's machine) -- expected to be gated or removed once real privacy
-policy work lands, see docs/multi_node.md.
+policy work lands, see remote_log.py.
 """
 
 import asyncio

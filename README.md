@@ -1,221 +1,270 @@
 # RetailVision
 
-AI-powered computer vision pipeline for real-time customer demographic detection, emotion recognition, foot traffic counting, and zone-engagement scoring in retail environments.
+Real-time computer vision system that turns retail camera feeds into
+anonymized occupancy and demographic analytics — measuring **how many
+people are in a space, where they are standing, how long they stay, and
+what mood they are in**, without any footage or biometric identifier
+leaving the camera.
 
-Single-process pipeline: one service ingests camera streams and runs detection, demographic/emotion recognition, foot traffic counting, and zone-engagement scoring, rather than splitting these into separate microservices. Built on OpenCV (capture/display) and PyTorch/Ultralytics YOLOv8 (detection, recognition, and classification, trained from scratch on public datasets rather than a pretrained fallback).
+Three components, each independently runnable:
 
-## Setup
+| Component | Stack | What it does |
+|---|---|---|
+| **Camera node** (`src/`) | Python, OpenCV, PyTorch/YOLOv8 | Runs inference at the edge; ships anonymized records only |
+| **Server** (`server/`) | FastAPI, SQLAlchemy, TimescaleDB | Ingests from many nodes, persists, serves aggregates |
+| **Dashboard** (`retailVision/`) | React 19, TypeScript, Vite, Tailwind | Live occupancy, floor heatmap, visit analytics |
 
-```
-python3.12 -m venv venv
-./venv/bin/pip install -r requirements.txt
-```
+Model accuracy, evaluation methodology, and known limitations:
+**[RESULTS.md](RESULTS.md)**.
 
-The venv must be created with **Python 3.12** (via Homebrew's `python@3.12`), not the system `/usr/bin/python3` (3.9.6, too old) and not another project's venv that may be first on `PATH`.
+---
 
-`opencv-python` is pinned to `4.10.0.84` in `requirements.txt` — the current latest shipped a broken build on macOS missing `cv2.CascadeClassifier` and the bundled Haar cascade XML files. Production code no longer uses either (`FaceDetector` now runs a YOLOv8 model), but the pin hasn't been re-verified against a newer opencv-python for the other cv2 functionality still used throughout (capture, display, video I/O) — don't bump it without testing generally, not just checking Haar cascade support.
-
-
-## Running the live pipeline
-
-```
-PYTHONPATH=. ./venv/bin/python3 -m src.retailvision.pipeline_demo                       # live camera, full age/gender/emotion pipeline
-PYTHONPATH=. ./venv/bin/python3 -m src.retailvision.pipeline_demo --source path/to.mp4  # pre-recorded video file instead of live camera
-PYTHONPATH=. ./venv/bin/python3 -m src.retailvision.pipeline_demo --benchmark           # headless, prints average FPS on exit
-PYTHONPATH=. ./venv/bin/python3 -m src.retailvision.pipeline_demo --server-url http://localhost:8000 --camera-node-id laptop-01 --api-key <key>  # also ship records to a central server
-./venv/bin/python3 -m src.retailvision.camera_test                                      # camera-only sanity check, no detection
-```
-
-The live/video modes open a preview window; press `q` to quit. Each machine reads from its own default camera (`cv2.VideoCapture(0)`) or a local video file. Running more than one camera means running the pipeline on more than one machine (each is a "camera node") and optionally shipping their results to a central server — see `docs/multi_node.md`. See `docs/inference_pipeline.md` for the pipeline's architecture, design decisions, and FPS results.
+## Architecture
 
 ```
-PYTHONPATH=. ./venv/bin/python3 -m unittest discover -s tests -v  # run the test suite
+ camera 0 ──┐
+ camera 1 ──┤  each node: detect → classify → track → localize
+ camera 2 ──┘        │
+                     │  anonymized records only (no pixels)
+                     ▼
+              FastAPI server ──► TimescaleDB (hypertable)
+                     │
+                     ▼
+               React dashboard
 ```
 
-## Module layout
+**Inference runs at the edge.** Each camera node runs the full pipeline
+locally and transmits only labels, counts and floor coordinates. Frames
+and face crops never leave the machine, so the privacy boundary is
+architectural rather than a policy applied after the fact.
 
-- `src/retailvision/camera_test.py` — minimal camera-open/read sanity check.
-- `src/retailvision/detection.py` — `FaceDetector`, runs a YOLOv8 detection-mode model trained from scratch on WIDER FACE and fine-tuned for retail camera conditions. First stage of the pipeline.
-- `src/retailvision/inference.py` — `InferencePipeline`, combines `FaceDetector` with the fine-tuned age/gender and emotion classifiers into one per-frame call. See `docs/inference_pipeline.md`.
-- `src/retailvision/tracking.py` — `CentroidTracker`, assigns stable track IDs to detected faces across frames via nearest-centroid matching. See `docs/people_counter.md`.
-- `src/retailvision/counter.py` — `LineCounter`, detects virtual-line crossings from tracked centroids and maintains net occupancy and per-track dwell time. See `docs/people_counter.md`.
-- `src/retailvision/output_log.py` — privacy layer: converts each detection into an anonymized record (demographic/emotion labels only, never pixel data) and appends it as newline-delimited JSON to `data/inference_log.json`. Schema documented in `docs/schema.md`.
-- `src/retailvision/remote_log.py` — optional second sink: batches the same anonymized records and ships them to a central server in real time, for multi-node deployments. See `docs/multi_node.md`.
-- `src/retailvision/pipeline_demo.py` — wires capture (camera or video file) → `InferencePipeline` → live preview with drawn bounding boxes and predictions, or a headless FPS benchmark. Also logs every detection via `output_log.py`.
+**Multiple cameras share one coordinate system.** Printed ArUco markers
+are pose-estimated individually (`cv2.solvePnP` plus each marker's known
+printed size — the only physical measurement the system needs), then
+merged into a common world frame. Two cameras need **one marker in
+common**, not four, so a zone larger than any single camera's view can be
+assembled from partial views. This is what lets a person seen by three
+cameras be counted once.
 
-## Server
+**A person is a track, not a frame.** Age and gender are decided once per
+person by majority vote over their first few frames and then frozen — the
+classifiers disagree with themselves frame to frame, so voting is both
+steadier and more accurate than keeping whichever answer landed last.
+Records are emitted on change plus a slow heartbeat, which took the data
+rate from roughly 300 records per person per minute to about 6.
 
-A separate FastAPI + TimescaleDB service (`server/`, its own venv/dependencies) receives anonymized records shipped by camera nodes, persists them, and serves recent-detections/live-occupancy/time-windowed-aggregate endpoints for the dashboard. See `docs/server.md` for the full setup, schema, and API details.
+---
 
-```
-cp .env.example .env && docker compose up -d timescaledb       # TimescaleDB on localhost:5433 (not 5432, avoids clashing with a local Postgres)
+## Quick start
+
+Requires **Python 3.12**, **Node 22**, and Docker.
+
+```bash
+# 1. Camera node
+python3.12 -m venv venv && ./venv/bin/pip install -r requirements.txt
+
+# 2. Server + database
+cp .env.example .env && docker compose up -d timescaledb
 cd server && python3.12 -m venv venv && ./venv/bin/pip install -r requirements.txt
-cp .env.example .env && ./venv/bin/alembic upgrade head        # creates the detection_events hypertable
-./venv/bin/uvicorn app.main:app --reload --port 8000            # http://localhost:8000/docs for the API
-./venv/bin/python3 -m pytest tests/ -v                          # run the server's test suite
+cp .env.example .env && ./venv/bin/alembic upgrade head
+./venv/bin/uvicorn app.main:app --reload --port 8000      # docs at /docs
+
+# 3. Dashboard
+cd retailVision && nvm use && npm install
+cp .env.example .env && npm run dev                        # http://localhost:5173
 ```
 
-## Dashboard
+Then run a camera node:
 
-A React + TypeScript dashboard (`retailVision/`, its own `package.json`) reads the server's endpoints and shows live occupancy and recent detections, with per-zone views planned once zone config lands. See `docs/dashboard.md` for the full stack/layout details.
-
-```
-cd retailVision && nvm use && npm install    # requires Node 22, see docs/dashboard.md
-cp .env.example .env                          # VITE_API_BASE_URL, defaults to http://localhost:8000
-npm run dev                                    # http://localhost:5173, requires the server running
+```bash
+PYTHONPATH=. ./venv/bin/python3 -m src.retailvision.pipeline_demo \
+  --source 0 \
+  --server-url http://localhost:8000 --camera-node-id cam-1 --api-key <key>
 ```
 
-## Dataset preparation
+`--source` takes a camera index or a video file path. Press `q` to quit.
 
-Datasets live under gitignored `data/<dataset>/raw/` (original downloads) and `data/<dataset>/processed/` (prepared, training-ready layout + a `distribution_report.json`). Human-readable documentation of sourcing, format decisions, and class distributions is tracked in `docs/datasets/`.
+<details>
+<summary><b>Environment notes</b></summary>
 
-```
-PYTHONPATH=scripts ./venv/bin/python3 scripts/prepare_utkface.py    # age/gender labels, see docs/datasets/utkface.md
-PYTHONPATH=scripts ./venv/bin/python3 scripts/prepare_fer2013.py    # 7 emotion classes, see docs/datasets/fer2013.md
-PYTHONPATH=scripts ./venv/bin/python3 scripts/prepare_widerface.py  # face bounding boxes, see docs/datasets/widerface.md
-```
+- **Python 3.12** specifically — not the system Python 3.9, which is too
+  old for the type syntax used throughout.
+- **Node 22** (pinned in `.nvmrc`). The Vite 8 / oxlint toolchain needs
+  `^20.19 || >=22.12`; an older Node does not fail loudly, it silently
+  skips installing platform-specific native bindings, so `npm install`
+  "succeeds" and `npm run dev` then crashes on a missing binding.
+- **TimescaleDB is on host port 5433**, not 5432, to avoid clashing with
+  a locally installed Postgres.
+- `opencv-python` is pinned. A later release shipped a macOS build
+  missing `cv2.CascadeClassifier` and its bundled cascade files.
+  Production code no longer uses either, but the pin has not been
+  re-verified against a newer release for the capture/display/video-I/O
+  functionality still used throughout — test broadly before bumping it.
+</details>
 
-UTKFace and FER-2013 consist of pre-cropped single-face images, so they're prepared as YOLOv8 **classification** datasets (folder-per-class); face localization is a separate upstream pipeline stage. WIDER FACE is the exception — it's full scenes with bounding-box annotations, prepared as a YOLOv8 **detection** dataset (`images/` + matching `labels/`) instead, for training the face detector `FaceDetector` now runs in production.
+---
 
-- **UTKFace** (`scripts/utkface_prep/`) — 33,481 images, age binned into `0-17`/`18-30`/`31-50`/`51+`, gender mapped to `Male`/`Female`, stratified 70/15/15 split. Known imbalance: White overrepresented ~5.5x across race labels (documented, not corrected).
-- **FER-2013** (`scripts/fer2013_prep/`) — 35,887 images across 7 emotion classes. Official test split kept untouched; a stratified 10% validation split is carved out of train. Known imbalance: Disgust is severely underrepresented (1.5% of data); Fear is normal-sized but documented as noisy/confusable with Sad and Surprise.
+## Marker-based zones
 
-## Model training
+A zone is a floor area defined by printed ArUco markers placed around
+its edges. Setup is a one-time survey, and the resulting map is shared
+by every node.
 
-Baseline classifiers are trained from scratch on the prepared datasets using `yolov8n-cls`. Age and gender are trained as two independent classifiers (YOLOv8 classification mode is single-label per run), even though both come from UTKFace. For the full history of decisions, results, and graphics behind the age/gender model line (dataset → baseline → fine-tune → real-world eval → rebinning → regression), see [`docs/models/README.md`](docs/models/README.md).
+```bash
+# 1. Calibrate each camera's intrinsics (once per physical camera)
+PYTHONPATH=. ./venv/bin/python3 scripts/calibrate_camera.py --source 0 --output calibration/camera_0.json
 
-```
-PYTHONPATH=scripts ./venv/bin/python3 scripts/train_age_gender_baseline.py     # trains age, then gender
-PYTHONPATH=scripts ./venv/bin/python3 scripts/evaluate_age_gender_baseline.py  # per-class precision/recall/F1, loss curves, report
-```
+# 2. Survey the markers into a shared world frame
+PYTHONPATH=. ./venv/bin/python3 scripts/aruco_pose_test.py \
+  --source 0 1 2 \
+  --calibration calibration/camera_0.json calibration/camera_1.json calibration/camera_2.json \
+  --marker-size 0.14 --anchor 3 --marker-mounting wall --marker-height 2.4 \
+  --zones config/zones.json --save-map config/marker_map.json
 
-- `scripts/age_gender_baseline/` — training/evaluation package (`constants.py`, `train.py`, `evaluate.py`, `plotting.py`).
-- Trained weights are saved to `models/age_gender/baseline_age.pt` and `baseline_gender.pt` (gitignored, like all `*.pt` files).
-- Evaluation writes `models/age_gender/baseline_report.json` and a loss/accuracy curve PNG per task. YOLOv8 classification mode reports top1/top5 accuracy rather than mAP@0.5 (a detection-mode metric); per-class precision/recall/F1 are computed separately via scikit-learn on the held-out test split.
-
-Fine-tuning builds on the baseline with augmentation and adjusted hyperparameters, retraining from `yolov8n-cls.pt` rather than continuing from the baseline weights (see `docs/models/age_gender_finetune.md` for why).
-
-```
-PYTHONPATH=scripts ./venv/bin/python3 scripts/finetune_age_gender.py           # trains age, then gender, with augmentation
-PYTHONPATH=scripts ./venv/bin/python3 scripts/evaluate_age_gender_finetune.py  # per-class metrics, loss curves, threshold check, report
-```
-
-- `scripts/age_gender_finetune/` — fine-tune training package (`constants.py`, `train.py`); reuses `age_gender_baseline`'s evaluation/plotting helpers, which are generic.
-- Final weights are saved to `models/age_gender/final_age.pt` and `final_gender.pt`.
-- Evaluation writes `models/age_gender/final_report.json`, checking top1 accuracy against the required 75% (age) / 85% (gender) thresholds per task.
-
-### Emotion classifier
-
-A single `yolov8n-cls` classifier trained from scratch on FER-2013 (7 emotion classes), same baseline methodology as age/gender: Ultralytics defaults, 100 epochs, `imgsz=224`.
-
-```
-PYTHONPATH=scripts ./venv/bin/python3 scripts/train_emotion_baseline.py     # trains the emotion classifier
-PYTHONPATH=scripts ./venv/bin/python3 scripts/evaluate_emotion_baseline.py  # per-class precision/recall/F1, loss curves, report
+# 3. Run nodes against the shared map
+PYTHONPATH=. ./venv/bin/python3 -m src.retailvision.pipeline_demo \
+  --source 0 --zones config/zones.json --marker-map config/marker_map.json \
+  --calibration calibration/camera_0.json --marker-size 0.14 --head-height 1.2 \
+  --server-url http://localhost:8000 --camera-node-id cam-1 --api-key <key>
 ```
 
-- `scripts/emotion_baseline/` — training/evaluation package (`constants.py`, `train.py`, `evaluate.py`, `plotting.py`), mirroring `age_gender_baseline/`'s structure.
-- Trained weights are saved to `models/emotion/baseline.pt`.
-- Evaluation writes `models/emotion/baseline_report.json` and a loss/accuracy curve PNG. See `docs/models/emotion_baseline.md` for full results and findings (71.12% top1; Fear is the weakest class as expected, but Disgust — despite being the most underrepresented class — outperforms several more common classes).
+Three details that decide whether this works at all:
 
-Fine-tuning follows the same pattern as age/gender, plus a per-class recall bar (80% on Happy and Neutral specifically, not an aggregate threshold):
+- **`--marker-height` is the anchor marker's centre height above the
+  floor.** It is the datum for the entire world frame. Get it wrong and
+  every zone floats at the wrong height, so nobody is ever inside one.
+  The overlay warns in red if a camera computes to below the floor.
+- **Camera height versus head height.** Positions come from intersecting
+  a viewing ray with a horizontal plane at head height. The closer a
+  camera sits to that plane, the more a small posture difference moves
+  the reported position: the error scales with
+  `(h_camera − h_assumed) / (h_camera − h_face)`. Mount cameras high.
+- **Calibration is per-resolution.** Focal length is measured in pixels,
+  so a calibration only describes a camera at the resolution it was
+  captured at. Running at another resolution rescales every distance
+  silently instead of failing.
 
-```
-PYTHONPATH=scripts ./venv/bin/python3 scripts/finetune_emotion.py           # fine-tunes with augmentation
-PYTHONPATH=scripts ./venv/bin/python3 scripts/evaluate_emotion_finetune.py  # per-class metrics, loss curves, threshold check, report
-```
+Zone membership samples the viewing ray across a band of plausible face
+heights rather than a single plane, so seated and standing people are
+both counted. Zone polygons are the convex hull of their markers, so
+markers can be listed in any order and a marker on an interior partition
+cannot fold a dent into the perimeter.
 
-- `scripts/emotion_finetune/` — fine-tune training package; reuses `emotion_baseline`'s evaluation/plotting helpers.
-- Final weights are saved to `models/emotion/final.pt`.
-- Neutral failed its 80% recall threshold across two fine-tuning iterations (67.6%, 67.3%) with confusion-matrix evidence of a structural neutral/sad overlap at FER-2013's 48×48 resolution. DeepFace's pre-trained emotion model was evaluated as an alternative (`scripts/evaluate_emotion_deepface.py`) but performed worse on every class (56.4% vs. our 69.7% overall) and was rejected. Our fine-tuned classifier remains production; Neutral (alongside Fear/Disgust) is accepted as a documented limitation. Full investigation: `docs/models/emotion_finetune.md`.
-- The live pipeline (`InferencePipeline._classify_emotion()` in `src/retailvision/inference.py`) collapses Angry/Disgust/Fear/Sad into a single `negative` output label — a post-hoc remap of the same 7-class classifier's predictions, not a retrain. Real-world evaluation showed Disgust and Fear collapsing almost entirely outside lab conditions (3.7%, 11.2% accuracy); reconstructing the confusion matrix for the merged label gives ~81% recall / ~87% precision, a large improvement over any of the four individually. Full data and the one caveat found (~20% of true Neutral leaks into `negative`): `docs/models/emotion_negative_consolidation.md`.
+---
 
-### Face detector
+## What the dashboard shows
 
-A `yolov8n` **detection**-mode model trained from scratch on WIDER FACE — the project's first detection-mode YOLOv8 run (age/gender/emotion are all classification-mode `yolov8n-cls`). The fine-tuned checkpoint is now the production `FaceDetector`, replacing the original Haar cascade implementation.
+- **Overview** — live per-zone occupancy (deduplicated across cameras),
+  KPI strip with week-over-week deltas, live camera feeds, configurable
+  crowding alerts
+- **Zones** — per-zone headcount with per-camera contributions, a
+  top-down **floor heatmap** (surveyed polygon, position density, live
+  person dots, zoom/pan/hover), and historical charts
+- **Visits** — one row per person's stay rather than per detection
+  event: arrival, duration, zone, dominant mood, plus stay-duration
+  distribution and hour-of-day rhythm
 
-```
-PYTHONPATH=scripts ./venv/bin/python3 scripts/train_widerface_baseline.py     # trains the face-detection baseline
-PYTHONPATH=scripts ./venv/bin/python3 scripts/evaluate_widerface_baseline.py  # mAP/precision/recall + official Easy/Medium/Hard recall, report
-```
+Page sections are reorderable and the arrangement persists per browser.
 
-- `scripts/widerface_baseline/` — training/evaluation package; evaluation includes both Ultralytics' own detection metrics and WIDER FACE's real, author-defined Easy/Medium/Hard difficulty partition (downloaded separately from the dataset's `eval_tools` package — the partition can't be reconstructed from the raw box annotations alone).
-- Trained weights are saved to `models/face_detection/baseline.pt`.
-- Evaluation writes `models/face_detection/baseline_report.json` and a loss/mAP curve PNG. See `docs/models/widerface_baseline.md` for full results (76.23% mAP@0.5 on the held-out test split; recall degrades monotonically from 94.18% on Easy faces to 71.10% on Hard, the expected WIDER FACE pattern).
+---
 
-Fine-tuning retrains from `yolov8n.pt` with augmentation tuned for the retail-camera domain gap documented in `docs/datasets/widerface.md` (wider zoom range, reduced mosaic — mosaic shrinks every face to ~1/4 frame, compounding WIDER FACE's small-face bias in the wrong direction for this use case):
+## Privacy design
 
-```
-PYTHONPATH=scripts ./venv/bin/python3 scripts/finetune_widerface.py           # fine-tunes with retail-tuned augmentation
-PYTHONPATH=scripts ./venv/bin/python3 scripts/evaluate_widerface_finetune.py  # metrics vs. baseline, threshold check, report
-```
+The constraint is that **no pixel-derived identifier ever leaves a camera
+node**, and the architecture is built around it rather than bolted on:
 
-- `scripts/widerface_finetune/` — fine-tune training package; reuses `widerface_baseline`'s evaluation/plotting helpers, which are generic across any trained checkpoint.
-- Final weights are saved to `models/face_detection/final.pt`.
-- Evaluation checks Hard-difficulty recall against a minimum threshold (71.10% — the baseline's own result). The fine-tune **regressed on every WIDER FACE metric** (mAP@0.5 74.63% vs. baseline's 76.23%; Hard recall 68.79%, failing the threshold) — the working hypothesis was that this was an expected cost of deliberately shifting training data toward retail-camera framing and away from WIDER FACE's own crowd-scene domain, not a training failure. See `docs/models/widerface_finetune.md` for the full analysis.
+- Inference is local; only labels, counts and floor coordinates are
+  transmitted
+- Log records carry no bounding boxes, crops, or face embeddings
+- `track_id` groups one person's records **within one camera and one
+  process run**. It is random, survives no restart, and is not comparable
+  between cameras — enough to count someone once, useless for following
+  them
+- Recognising the same person across cameras is solved **spatially**,
+  from world position, never by appearance matching
+- Live frame streaming to the dashboard exists but is **opt-in** behind
+  `--stream-frames`, and is documented as a deliberate trade-off against
+  this design
 
-That hypothesis held up: real-world evaluation against live footage (both checkpoints, replayed against the same recordings for a fair comparison — see `docs/model_evaluation.md`) told the opposite story from the WIDER FACE metrics. Detection rate on the two conditions that motivated this migration in the first place — non-frontal angles, where Haar cascade's documented rates were 27% (side view) and 46% (looking down) — jumped to **~97-100%** for both checkpoints. A recurring background object (already documented as a Haar cascade false-positive case) fooled both checkpoints similarly often, except the fine-tuned checkpoint showed more resistance to it in matched-frame comparison (small sample, but consistent), and a dedicated empty-background test showed both checkpoints near-zero false-positive rate. The fine-tuned checkpoint (`final.pt`) is now production, on the strength of the real-world result, not the WIDER FACE benchmark.
+Re-identification across visits is deliberately not implemented. It
+would make several metrics better and is the one capability this
+architecture rules out on purpose.
 
-## Live demo
+---
 
-To just watch the current classifiers and the age-regression model run on your own webcam, with no ground truth or logging needed:
-
-```
-PYTHONPATH=.:scripts ./venv/bin/python3 scripts/live_demo.py
-```
-
-Opens a live preview with each detected face boxed and labeled with its predicted age bin, continuous age estimate, gender, and confidence — e.g. `18-40 (~26y, 0.91) / Male (0.97)`. Always reflects whatever weights currently sit at `models/age_gender/final_age.pt`/`final_gender.pt`/`regression_age.pt`. Press `q` to quit. For accuracy evaluation (logging predictions against a known ground truth across conditions), see Real-world evaluation below instead.
-
-## Real-world evaluation
-
-The fine-tuned classifiers are also validated against live webcam video, not just the static test sets, to check whether test-set accuracy holds up under real capture conditions. See `docs/model_evaluation.md` for full results.
-
-**Age/gender** — conditions are lighting/occlusion/angle. Gender classification generalizes well; age classification degrades severely on live camera input regardless of condition; face detection itself fails on faces angled past ~45°.
-
-```
-PYTHONPATH=.:scripts ./venv/bin/python3 scripts/evaluate_real_world.py --condition <name> --true-age <bin> --true-gender <Male|Female>
-PYTHONPATH=.:scripts ./venv/bin/python3 scripts/summarize_real_world_eval.py
-```
-
-- `scripts/real_world_eval/` — live-capture package (`constants.py`, `classify.py`, `capture.py`), reusing the existing `FaceDetector`.
-- Each condition session opens a live preview (green box = correct, red = wrong) and appends per-frame predictions to `runs/real_world_eval/<condition>.csv`; press `q` to stop.
-- Summarization writes `models/age_gender/real_world_eval_report.json`: face-detection rate and per-task accuracy per condition, compared against the fine-tuned classifier's test-set accuracy.
-
-**Emotion** — expanded into a full emotion × condition matrix (7 emotions × 5 conditions). Fear and disgust are unreliable live at any distance (3-16% accuracy); happy/angry/neutral hold up well at close-to-medium range; non-frontal poses (side view, looking down) fail detection too often to even collect reliable per-emotion data. An early "severe close-range collapse" finding turned out to be a background object (a mannequin) being misdetected as a face, not a real model or lens issue — see the model_evaluation.md writeup for the full investigation.
+## Layout
 
 ```
-PYTHONPATH=.:scripts ./venv/bin/python3 scripts/evaluate_emotion_real_world.py --condition <name> --true-emotion <label>
-PYTHONPATH=.:scripts ./venv/bin/python3 scripts/summarize_emotion_real_world_eval.py
+src/retailvision/      camera node pipeline
+  detection.py           YOLOv8 face detector
+  inference.py           detector + age/gender/emotion classifiers, one call per frame
+  tracking.py            centroid tracker, Hungarian matching
+  person_track.py        per-person identity voting and change-based emission
+  calibration.py         intrinsics, with a self-consistency check
+  marker_pose.py         per-marker 3D pose from solvePnP
+  marker_map.py          shared world frame across cameras
+  zones.py               floor polygons and zone membership
+  counter.py             virtual-line crossing counter
+  output_log.py          anonymized local record sink
+  remote_log.py          batched shipping to the server
+  pipeline_demo.py       wires it together
+
+server/app/            FastAPI service
+  routers/               ingest, detections, occupancy, aggregates, summary, visits, frames, zone geometry
+  models/, schemas/      SQLAlchemy ORM and Pydantic models
+  dedup.py               cross-camera spatial deduplication
+migrations/            Alembic
+
+retailVision/src/      React dashboard
+  api/, hooks/           typed client and TanStack Query polling
+  components/, pages/    charts, occupancy, cameras, layout
+  store/                 Zustand, UI state only
+
+scripts/               dataset prep, training, evaluation, camera calibration and survey tools
 ```
 
-- `scripts/emotion_real_world_eval/` — live-capture package, mirroring `real_world_eval/`'s structure.
-- Summarization writes `models/emotion/real_world_eval_report.json`, comparing each condition against the *specific* held-emotion's test-set recall (not the blended overall top1 — see the script's docstring for why that distinction matters here).
+---
 
-**Face detector** — unlike the classifiers above, this evaluates two YOLOv8 checkpoints (`baseline.pt`, `final.pt`) side by side against the Haar cascade's own documented detection rates, plus a dedicated false-positive stress test (camera pointed at a background, no person in frame). Each condition is **recorded once** and replayed through both checkpoints, so they're compared on identical frames rather than two separate live takes:
+## Tests
 
-```
-PYTHONPATH=.:scripts ./venv/bin/python3 scripts/record_widerface_eval_session.py --condition <name>
-PYTHONPATH=.:scripts ./venv/bin/python3 scripts/evaluate_widerface_real_world.py --condition <name> --model baseline
-PYTHONPATH=.:scripts ./venv/bin/python3 scripts/evaluate_widerface_real_world.py --condition <name> --model final
-PYTHONPATH=.:scripts ./venv/bin/python3 scripts/summarize_widerface_real_world_eval.py
+```bash
+PYTHONPATH=. ./venv/bin/python3 -m unittest discover -s tests -v   # camera node
+cd server && ./venv/bin/python -m pytest tests/ -v                 # server
+cd retailVision && npm run build && npm run lint                   # dashboard
 ```
 
-- `scripts/widerface_real_world_eval/` — record/evaluate package; recording has no model inference (keeps it checkpoint-agnostic), evaluation replays the saved video through one chosen checkpoint.
-- Conditions: `close_1m`, `medium_2m`, `far_4m`, `side_view`, `looking_down`, `no_person_background` (the false-positive test — any detection here is unambiguous, not a matter of degree). `far_4m` wasn't run — close and medium range were already both ~100% for both checkpoints, and the two conditions that actually motivated this evaluation (the non-frontal angles) were fully covered.
-- Summarization writes `models/face_detection/real_world_eval_report.json`, comparing detection rate per condition against the Haar cascade's documented rates.
+Server tests run against in-memory SQLite, which exercises the
+application and ORM logic; TimescaleDB-specific DDL is covered only by
+applying the migrations for real.
 
-## Age regression (continuous age for live display)
+---
 
-The 4-bin classifier is coarse for live feedback ("18-30" isn't very informative). A separate model predicts a continuous age (e.g. "~25") for display, while the classifier continues to handle analytics/reporting. An earlier attempt to solve this by re-binning the classifier into narrower classes (7, then 10) was abandoned — adult age brackets plateaued at 50-65% F1 regardless of tuning; see `docs/models/age_rebinning_investigation.md`. Regression sidesteps that ceiling entirely since there are no bin boundaries to be confused across.
+## Engineering notes
 
-Ultralytics/YOLOv8 has no native regression task, so this model is a plain PyTorch/torchvision ResNet18 with a single-output regression head, trained separately from the YOLOv8 classifiers.
+A few problems whose solutions shaped the system:
 
-```
-PYTHONPATH=scripts ./venv/bin/python3 scripts/prepare_age_regression.py    # builds train/val/test CSV manifests (path, age, gender)
-PYTHONPATH=scripts ./venv/bin/python3 scripts/train_age_regression.py      # trains with early stopping on validation MAE
-PYTHONPATH=scripts ./venv/bin/python3 scripts/evaluate_age_regression.py   # overall + per-age-group MAE on the held-out test split
-```
+**A good reprojection error does not mean a good calibration.** Three of
+four camera calibrations reported 0.31–0.86 px error while being
+physically impossible — distortion coefficients had absorbed capture
+noise into enormous values. Reprojection error cannot catch this,
+because it is the metric the overfit was optimised against. The fix was
+a second, independent check: undistort a dense grid of points, redistort
+them, and measure whether the round trip agrees. The broken models were
+110–14,412 px out; the corrected ones, under 0.5 px.
 
-- `scripts/age_regression_prep/` — builds CSV manifests instead of a folder-per-class layout (regression has no discrete classes); reuses `utkface_prep`'s filename parsing and stratified split.
-- `scripts/age_regression/` — training package (`dataset.py`, `model.py`, `train.py`, `evaluate.py`, `plotting.py`).
-- Weights saved to `models/age_gender/regression_age.pt`; evaluation writes `models/age_gender/regression_report.json` with overall MAE and MAE bucketed into the original 4-bin classifier ranges for a per-age-group breakdown (bucketing is for reporting only — the model itself is never trained against bins).
-- Runs alongside the 4-bin classifier in the live pipeline: classifier output for analytics, regression output for display.
+**A flat square has two valid poses.** Both project to nearly identical
+pixels, and choosing by reprojection error alone picked an orientation
+128° wrong — separated from the correct one by 0.006 px. Resolving it
+needs information the marker itself does not carry: agreement with other
+markers in view, the plane they are mounted on, and continuity with the
+previous frame.
+
+**Pixel thresholds are resolution-dependent.** After moving capture to
+1080p to match the calibrations, the tracker's fixed 75-pixel match
+radius silently became far too tight — a seated person shifting 20 cm
+moved 106 px and was issued a new identity almost every frame, so one
+person read as sixty. Thresholds in pixels now scale with frame width.
+
+**Emit on change, not per frame.** See the emotion-label consolidation
+in [RESULTS.md](RESULTS.md) for the same principle applied to model
+output: the honest unit of measurement is a person, not a frame.

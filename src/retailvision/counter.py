@@ -9,9 +9,9 @@ per-track dwell time (elapsed time since that track's entry event).
 Known limitation: a track that leaves the frame without recrossing the
 line (e.g. exits out of camera view on the entry side) is never counted
 as an exit, since there is only one line and no enclosing zone boundary
-to detect that departure. This mirrors the ticket's explicit centroid
-tracking scope -- a full zone-boundary tracker is documented future work
-(see docs/future_work/).
+to detect that departure. This is the deliberate scope of centroid
+tracking against a single line; marker-based zones (zones.py) supersede
+it by testing occupancy against a polygon instead.
 """
 
 from typing import Literal

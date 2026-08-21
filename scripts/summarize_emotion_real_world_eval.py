@@ -7,7 +7,7 @@ scripts/evaluate_emotion_real_world.py, computes face-detection rate and
 emotion accuracy for each combination, and writes a full condition x
 emotion matrix to models/emotion/real_world_eval_report.json. Use this
 report as the data source when writing the per-condition analysis and
-known-failure-case list into docs/model_evaluation.md.
+known-failure-case list in RESULTS.md.
 
 Each session holds one true emotion throughout, so degradation is compared
 against that specific class's held-out test-set *recall*
