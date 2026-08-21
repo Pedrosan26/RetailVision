@@ -3,7 +3,7 @@ detection.py
 
 SQLAlchemy ORM model for the detection_events table -- one row per
 anonymized detection event received from a camera node. Column shape
-mirrors the frozen 8-field log schema (see docs/schema.md in the repo
+mirrors the log schema (see docs/schema.md in the repo
 root) plus two server-attributed columns, camera_node_id and
 ingested_at, that live outside that frozen client-side schema.
 
@@ -36,7 +36,19 @@ class DetectionEvent(Base):
     camera_node_id: Mapped[str] = mapped_column(String, nullable=False)
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     ingested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    # Groups the rows belonging to one person while they were in view of one
+    # camera, so counting people means counting distinct track_ids rather than
+    # rows. Only unique within a camera node and a run of its process: the same
+    # person seen by two cameras carries two different track_ids, which is what
+    # the world position exists to reconcile.
+    track_id: Mapped[str | None] = mapped_column(String, nullable=True)
     zone_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    # The person's floor position in the zone's shared world frame, in meters.
+    # Every camera watching a zone reports in the same frame, which is what lets
+    # one person seen by several cameras be recognised as one person rather than
+    # counted several times. Null whenever zone_id is.
+    world_x: Mapped[float | None] = mapped_column(Float, nullable=True)
+    world_y: Mapped[float | None] = mapped_column(Float, nullable=True)
     count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     age_group: Mapped[str] = mapped_column(String, nullable=False)
     gender: Mapped[str] = mapped_column(String, nullable=False)

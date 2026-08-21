@@ -1,1 +1,165 @@
 @import "tailwindcss";
+
+/* One token system for the whole dashboard.
+ *
+ * The neutrals are a cool gray ramp on white surfaces -- the grammar of
+ * operations dashboards (monitoring tools, consoles), where the chrome is
+ * deliberately unremarkable so the numbers are the loudest thing on the
+ * page. One blue carries every interactive affordance; status colours are
+ * reserved for status. Chart colours and interface chrome are drawn from
+ * the same set deliberately: a chart wearing a different palette to the
+ * panel around it reads as two systems bolted together.
+ *
+ * Both modes are chosen, not derived. Dark is the same roles re-stepped
+ * for a dark surface -- inverting a light palette drifts the series
+ * colours out of the lightness band where they stay distinguishable to
+ * colour-blind readers.
+ *
+ * Components reference these as arbitrary values (bg-[var(--app-surface)]),
+ * so one class covers both modes and the values live in exactly one place.
+ * They are declared on :root rather than a wrapper class so a chart nested
+ * anywhere inherits them without needing to be wrapped.
+ */
+:root {
+  color-scheme: light;
+
+  /* Planes, back to front. */
+  --app-page: #f6f7f8;
+  --app-surface: #ffffff;
+  --app-raised: #ffffff;
+
+  /* Ink. */
+  --app-ink: #17191c;
+  --app-ink-secondary: #4b5259;
+  --app-ink-muted: #7d8590;
+
+  /* Lines. Hairlines, deliberately quieter than the text they separate. */
+  --app-line: #e3e6ea;
+  --app-line-strong: #ccd2d9;
+
+  /* Accent, matching categorical slot 1 so a highlighted control and a
+     leading data series are recognisably the same blue. */
+  --app-accent: #1f6feb;
+  --app-accent-ink: #ffffff;
+  --app-accent-wash: #eaf2fd;
+
+  /* Status. Reserved -- never reused as a series colour, and always paired
+     with a label so meaning never rests on hue alone. */
+  --app-good: #1a7f37;
+  --app-warning: #9a6700;
+  --app-critical: #cf222e;
+  --app-critical-wash: #fdebec;
+
+  /* Chart roles. */
+  --viz-surface: #ffffff;
+  --viz-ink: #17191c;
+  --viz-ink-secondary: #4b5259;
+  --viz-ink-muted: #7d8590;
+  --viz-grid: #e9ebee;
+  --viz-axis: #ccd2d9;
+
+  --viz-series-1: #1f6feb;
+  --viz-series-2: #e16f24;
+  --viz-series-3: #189e6e;
+  --viz-series-4: #b88700;
+  --viz-series-5: #d0679d;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --app-page: #0d1117;
+    --app-surface: #161b22;
+    --app-raised: #1c222b;
+
+    --app-ink: #e6edf3;
+    --app-ink-secondary: #a3aeb9;
+    --app-ink-muted: #768390;
+
+    --app-line: #262c34;
+    --app-line-strong: #3a424c;
+
+    --app-accent: #4493f8;
+    --app-accent-ink: #0d1117;
+    --app-accent-wash: #12233b;
+
+    --app-good: #3fb950;
+    --app-warning: #d29922;
+    --app-critical: #f85149;
+    --app-critical-wash: #331b1d;
+
+    --viz-surface: #161b22;
+    --viz-ink: #e6edf3;
+    --viz-ink-secondary: #a3aeb9;
+    --viz-ink-muted: #768390;
+    --viz-grid: #262c34;
+    --viz-axis: #3a424c;
+
+    --viz-series-1: #4493f8;
+    --viz-series-2: #d0651a;
+    --viz-series-3: #17936a;
+    --viz-series-4: #b68a00;
+    --viz-series-5: #c85f92;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --app-page: #0d1117;
+  --app-surface: #161b22;
+  --app-raised: #1c222b;
+
+  --app-ink: #e6edf3;
+  --app-ink-secondary: #a3aeb9;
+  --app-ink-muted: #768390;
+
+  --app-line: #262c34;
+  --app-line-strong: #3a424c;
+
+  --app-accent: #4493f8;
+  --app-accent-ink: #0d1117;
+  --app-accent-wash: #12233b;
+
+  --app-good: #3fb950;
+  --app-warning: #d29922;
+  --app-critical: #f85149;
+  --app-critical-wash: #331b1d;
+
+  --viz-surface: #161b22;
+  --viz-ink: #e6edf3;
+  --viz-ink-secondary: #a3aeb9;
+  --viz-ink-muted: #768390;
+  --viz-grid: #262c34;
+  --viz-axis: #3a424c;
+
+  --viz-series-1: #4493f8;
+  --viz-series-2: #d0651a;
+  --viz-series-3: #17936a;
+  --viz-series-4: #b68a00;
+  --viz-series-5: #c85f92;
+}
+
+body {
+  background: var(--app-page);
+  color: var(--app-ink);
+  font-feature-settings: "cv05";
+}
+
+/* Keyboard focus stays visible everywhere; the accent ring is the same blue
+   as the active nav item, so "this is where you are" reads consistently. */
+:focus-visible {
+  outline: 2px solid var(--app-accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -2,5 +2,5 @@
 
 /** Renders a centered loading message inside its parent container. */
 export function LoadingState({ label = "Loading…" }: { label?: string }) {
-  return <div className="py-8 text-center text-sm text-slate-400">{label}</div>;
+  return <div className="py-10 text-center text-sm text-[var(--app-ink-muted)]">{label}</div>;
 }

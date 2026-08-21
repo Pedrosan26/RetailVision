@@ -16,23 +16,23 @@ function relativeTime(isoTimestamp: string): string {
 export function OccupancyCard({ occupancy }: { occupancy: Occupancy }) {
   const isZone = occupancy.zone_id !== null;
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+    <div className="rounded-lg border border-[var(--app-line)] bg-[var(--app-surface)] p-5">
       <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-slate-500 dark:text-slate-400">{occupancy.key}</span>
+        <span className="text-sm font-medium text-[var(--app-ink-muted)]">{occupancy.key}</span>
         <span
           className={`rounded-full px-2 py-0.5 text-xs font-medium ${
             isZone
               ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400"
-              : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+              : "bg-[var(--app-page)] text-[var(--app-ink-muted)]"
           }`}
         >
           {isZone ? "zone" : "camera node"}
         </span>
       </div>
-      <div className="mt-3 font-mono text-3xl font-semibold tabular-nums text-slate-900 dark:text-slate-100">
+      <div className="mt-3 font-mono text-3xl font-semibold tabular-nums text-[var(--app-ink)]">
         {occupancy.count ?? "—"}
       </div>
-      <div className="mt-1 text-xs text-slate-400">Updated {relativeTime(occupancy.timestamp)}</div>
+      <div className="mt-1 text-xs text-[var(--app-ink-muted)]">Updated {relativeTime(occupancy.timestamp)}</div>
     </div>
   );
 }

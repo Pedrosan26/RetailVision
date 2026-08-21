@@ -13,7 +13,7 @@ export function OccupancyGrid() {
   if (isPending) return <LoadingState label="Loading occupancy…" />;
   if (isError) return <ErrorState message="Couldn't load occupancy -- is the server running?" />;
   if (data.length === 0) {
-    return <div className="py-8 text-center text-sm text-slate-400">No detections reported yet.</div>;
+    return <div className="py-8 text-center text-sm text-[var(--app-ink-muted)]">No detections reported yet.</div>;
   }
 
   return (

@@ -127,6 +127,7 @@ PYTHONPATH=scripts ./venv/bin/python3 scripts/evaluate_emotion_finetune.py  # pe
 - `scripts/emotion_finetune/` — fine-tune training package; reuses `emotion_baseline`'s evaluation/plotting helpers.
 - Final weights are saved to `models/emotion/final.pt`.
 - Neutral failed its 80% recall threshold across two fine-tuning iterations (67.6%, 67.3%) with confusion-matrix evidence of a structural neutral/sad overlap at FER-2013's 48×48 resolution. DeepFace's pre-trained emotion model was evaluated as an alternative (`scripts/evaluate_emotion_deepface.py`) but performed worse on every class (56.4% vs. our 69.7% overall) and was rejected. Our fine-tuned classifier remains production; Neutral (alongside Fear/Disgust) is accepted as a documented limitation. Full investigation: `docs/models/emotion_finetune.md`.
+- The live pipeline (`InferencePipeline._classify_emotion()` in `src/retailvision/inference.py`) collapses Angry/Disgust/Fear/Sad into a single `negative` output label — a post-hoc remap of the same 7-class classifier's predictions, not a retrain. Real-world evaluation showed Disgust and Fear collapsing almost entirely outside lab conditions (3.7%, 11.2% accuracy); reconstructing the confusion matrix for the merged label gives ~81% recall / ~87% precision, a large improvement over any of the four individually. Full data and the one caveat found (~20% of true Neutral leaks into `negative`): `docs/models/emotion_negative_consolidation.md`.
 
 ### Face detector
 

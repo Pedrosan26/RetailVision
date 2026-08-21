@@ -53,9 +53,20 @@ class RemoteLogShipper:
         timestamp: str | None = None,
         count: int | None = None,
         dwell_seconds: float | None = None,
+        zone_id: str | None = None,
+        world_position: tuple[float, float] | None = None,
+        track_id: str | None = None,
     ) -> None:
         """Build a schema-conforming record, buffer it, and flush once the batch size or flush interval is reached."""
-        record = build_log_record(detection, timestamp=timestamp, count=count, dwell_seconds=dwell_seconds)
+        record = build_log_record(
+            detection,
+            timestamp=timestamp,
+            count=count,
+            dwell_seconds=dwell_seconds,
+            zone_id=zone_id,
+            world_position=world_position,
+            track_id=track_id,
+        )
         self._buffer.append(record)
 
         elapsed = time.monotonic() - self._last_flush

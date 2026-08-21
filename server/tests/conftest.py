@@ -20,12 +20,17 @@ from app.models.detection import Base
 TEST_CAMERA_NODE_ID = "test-node"
 TEST_API_KEY = "test-key"
 
+# Several nodes, for the cross-camera cases: deduplication only means anything
+# when more than one camera can authenticate and report on the same zone.
+TEST_CAMERA_NODES = {"cam-a": "key-a", "cam-b": "key-b", "cam-c": "key-c"}
+
 
 def _test_settings() -> Settings:
     """Settings override with a known, predictable camera-node API key for tests."""
+    nodes = {TEST_CAMERA_NODE_ID: TEST_API_KEY, **TEST_CAMERA_NODES}
     return Settings(
         database_url="sqlite+aiosqlite:///:memory:",
-        camera_node_api_keys=f"{TEST_CAMERA_NODE_ID}:{TEST_API_KEY}",
+        camera_node_api_keys=",".join(f"{node}:{key}" for node, key in nodes.items()),
     )
 
 

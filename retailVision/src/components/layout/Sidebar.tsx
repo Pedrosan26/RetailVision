@@ -1,37 +1,52 @@
-// Left-hand navigation for the dashboard's routed pages.
+// Left-hand navigation.
+//
+// Each item carries a one-line description of what the page answers, because
+// "Zones" and "Detections" both sound like they might hold the same thing
+// until you have opened both.
 
 import { NavLink } from "react-router-dom";
 
 const NAV_ITEMS = [
-  { to: "/", label: "Overview", end: true },
-  { to: "/detections", label: "Detections" },
-  { to: "/zones", label: "Zones" },
+  { to: "/", label: "Overview", hint: "Live view", end: true },
+  { to: "/zones", label: "Zones", hint: "Per-area history" },
+  { to: "/detections", label: "Detections", hint: "Event log" },
 ];
 
 /** Renders the sidebar nav, highlighting the currently active route. */
 export function Sidebar() {
   return (
-    <aside className="flex w-56 shrink-0 flex-col gap-1 border-r border-slate-200 bg-white px-4 py-6 dark:border-slate-800 dark:bg-slate-950">
+    <aside className="flex w-56 shrink-0 flex-col border-r border-[var(--app-line)] bg-[var(--app-surface)] px-3 py-5">
       <div className="mb-6 px-2">
-        <span className="text-lg font-semibold tracking-tight text-slate-900 dark:text-slate-100">
-          RetailVision
-        </span>
+        <div className="text-sm font-semibold tracking-tight text-[var(--app-ink)]">RetailVision</div>
+        <div className="mt-0.5 text-[0.7rem] text-[var(--app-ink-muted)]">Zone occupancy</div>
       </div>
-      <nav className="flex flex-col gap-1">
+
+      <nav className="flex flex-col gap-0.5">
         {NAV_ITEMS.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
             end={item.end}
             className={({ isActive }) =>
-              `rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+              `rounded-md px-3 py-2 transition-colors ${
                 isActive
-                  ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
-                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                  ? "bg-[var(--app-accent-wash)] text-[var(--app-accent)]"
+                  : "text-[var(--app-ink-secondary)] hover:bg-[var(--app-page)]"
               }`
             }
           >
-            {item.label}
+            {({ isActive }) => (
+              <>
+                <span className="block text-sm font-medium">{item.label}</span>
+                <span
+                  className={`block text-[0.7rem] ${
+                    isActive ? "text-[var(--app-accent)] opacity-80" : "text-[var(--app-ink-muted)]"
+                  }`}
+                >
+                  {item.hint}
+                </span>
+              </>
+            )}
           </NavLink>
         ))}
       </nav>

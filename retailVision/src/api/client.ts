@@ -14,17 +14,29 @@ export class ApiError extends Error {
   }
 }
 
-/** Builds a query string from a params object, dropping undefined/null values. */
-function buildQuery(params?: Record<string, string | number | undefined>): string {
+export type QueryValue = string | number | undefined | null | Array<string | number>;
+
+/** Builds a query string from a params object, dropping empty values and repeating array values as one param each. */
+function buildQuery(params?: Record<string, QueryValue>): string {
   if (!params) return "";
-  const entries = Object.entries(params).filter(([, v]) => v !== undefined && v !== null);
-  if (entries.length === 0) return "";
-  const search = new URLSearchParams(entries.map(([k, v]) => [k, String(v)]));
-  return `?${search.toString()}`;
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null) continue;
+    // An array repeats the key once per value, which is how the server reads
+    // "any of these". An empty array appends nothing, so a filter that selects
+    // everything is sent as no filter at all rather than as an impossible one.
+    if (Array.isArray(value)) {
+      for (const item of value) search.append(key, String(item));
+    } else {
+      search.append(key, String(value));
+    }
+  }
+  const query = search.toString();
+  return query ? `?${query}` : "";
 }
 
 /** GETs a JSON resource from the server API, throwing ApiError on a non-2xx response. */
-export async function apiGet<T>(path: string, params?: Record<string, string | number | undefined>): Promise<T> {
+export async function apiGet<T>(path: string, params?: Record<string, QueryValue>): Promise<T> {
   const response = await fetch(`${BASE_URL}${path}${buildQuery(params)}`);
   if (!response.ok) {
     throw new ApiError(`${response.status} ${response.statusText}`, response.status);

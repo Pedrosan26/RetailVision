@@ -70,12 +70,44 @@ window query (portable across Postgres and SQLite, unlike Postgres-only
 configuration starts populating `zone_id` -- no query change needed at
 that point.
 
+### `GET /api/v1/summary`
+
+Headline figures for one time range in one response: total events,
+distinct people, average dwell, the emotion mix, and the busiest hour
+(the hour-aligned bucket with the most distinct people). Query params:
+`since`/`until` (default: last 24h), `zone_id`. Backs the dashboard's
+KPI row; deriving these client-side from /aggregates would mean summing
+per-bucket unique-people counts, which overcounts anyone present across
+a bucket boundary. `unique_people` carries the same per-camera caveat as
+the aggregates: someone visible to two cameras counts twice.
+
 ### `GET /api/v1/aggregates`
 
-Time-windowed rollups: detection count, age/gender/emotion distribution,
-and average dwell/engagement per bucket. Query params: `window` (e.g.
+Time-windowed rollups: detection count, distinct people, age/gender/emotion
+distribution, and average dwell/engagement per bucket. Query params: `window` (e.g.
 `5m`, `1h`, `24h`; default `5m`), `since`/`until` (default: last 24h),
-`zone_id`.
+`zone_id`, and the repeatable demographic filters `age_group`, `gender`
+and `emotion`.
+
+The demographic filters narrow which events are counted at all, before
+bucketing. Repeating one reads as "any of these"
+(`?emotion=Happy&emotion=Neutral`); different dimensions intersect
+(`?age_group=18-40&gender=Male` is both). Omitting a dimension does not
+filter on it, which is what the dashboard sends when its filters are
+cleared -- so "show everything" is the absence of a parameter rather
+than a list of every known value, and a label the classifier has never
+emitted never has to be enumerated anywhere.
+
+`unique_people` counts distinct `(camera_node_id, track_id)` pairs, not
+rows. The pair is the identity because a node's track IDs are only unique
+within that node and within one run of its process, so the same ID arriving
+from two nodes is two people. Rows with no `track_id` -- from a node that
+predates the field -- count as one person each, which is exactly what they
+meant before it existed.
+
+This is per-camera, so someone standing where two cameras overlap still
+counts twice here. Collapsing that is a spatial question, answered from the
+shared world frame by `/occupancy/zones`, not by the track ID.
 
 Bucketing happens in Python, not via TimescaleDB's `time_bucket()` SQL
 function: one portable filtered query fetches matching rows, then
@@ -162,3 +194,41 @@ specific behavior. The hypertable/index DDL is exercised by actually
 applying the Alembic migration against real TimescaleDB, verified
 manually: `alembic upgrade head` followed by a real `POST
 /api/v1/ingest` and confirming the row lands correctly.
+
+
+## Cross-camera deduplication
+
+`GET /api/v1/occupancy/zones` answers how many people are actually in a
+zone, as opposed to `GET /api/v1/occupancy/live`, which reports what each
+camera individually last said.
+
+The two differ because **summing per-camera counts is not a headcount**.
+Cameras covering one area see each other's subjects, so a person visible to
+three cameras is reported three times; with several cameras on one room the
+sum can be a multiple of the truth.
+
+Merging is possible because every camera watching a zone reports positions
+in the same world frame (see `docs/aruco_zones.md`), so "is this the same
+person" becomes a distance check. `app/dedup.py` holds the logic. Two
+decisions in it are worth knowing, because each trades one error for
+another:
+
+- **Only detections from different cameras are merged.** Two people standing
+  close together are reported by one camera as two detections, and merging
+  those would undercount a queue or a group -- the situations occupancy is
+  most used to measure. A camera's own frame is taken as ground truth for
+  how many people it sees.
+- **Each camera contributes only its most recent frame.** Positions from a
+  second ago belong to someone who has since moved, so pooling frames would
+  smear one person into a trail and count them repeatedly.
+
+The merge radius defaults to 1.0m and is tunable per request. It must
+exceed the position error, which is dominated by how far each subject's real
+head height differs from the assumed one -- roughly half a metre for a
+camera a metre above the assumed plane, and much worse for a camera closer
+to it. See the head-height discussion in `docs/aruco_zones.md`; a merge
+radius smaller than that error counts one person twice, and one much larger
+merges two people standing near each other.
+
+Records without a position -- nodes running without `--zones` -- cannot
+contribute to a headcount and are excluded.

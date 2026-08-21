@@ -2,8 +2,8 @@
 detection.py
 
 Pydantic request/response models for the ingestion and read endpoints.
-DetectionRecord mirrors the frozen 8-field log schema exactly -- see
-docs/schema.md in the repo root.
+DetectionRecord mirrors the log schema exactly -- see docs/schema.md in
+the repo root.
 """
 
 from datetime import datetime
@@ -12,10 +12,17 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class DetectionRecord(BaseModel):
-    """Validates one anonymized detection record against the frozen 8-field schema."""
+    """Validates one anonymized detection record against the log schema."""
 
     timestamp: datetime
+    # Groups one person's records together. Optional so a node that has not
+    # been upgraded keeps ingesting unchanged.
+    track_id: str | None = None
     zone_id: str | None = None
+    # Optional so that camera nodes running without zones, and nodes not yet
+    # upgraded, keep validating against this model unchanged.
+    world_x: float | None = None
+    world_y: float | None = None
     count: int | None = None
     age_group: str
     gender: str
@@ -45,7 +52,10 @@ class DetectionOut(BaseModel):
     id: int
     camera_node_id: str
     timestamp: datetime
+    track_id: str | None
     zone_id: str | None
+    world_x: float | None
+    world_y: float | None
     count: int | None
     age_group: str
     gender: str
@@ -55,7 +65,7 @@ class DetectionOut(BaseModel):
 
 
 class OccupancyOut(BaseModel):
-    """Latest known occupancy for one zone (or camera node, before zones exist)."""
+    """Latest known occupancy reported by one camera node, for one zone."""
 
     key: str
     camera_node_id: str
@@ -64,11 +74,43 @@ class OccupancyOut(BaseModel):
     timestamp: datetime
 
 
+class ZoneOccupancyOut(BaseModel):
+    """A zone's headcount with people seen by several cameras counted once."""
+
+    zone_id: str
+    total: int
+    per_camera: dict[str, int]
+    cameras_reporting: int
+    timestamp: datetime
+
+
+class SummaryOut(BaseModel):
+    """Headline figures over one time range, for the dashboard's KPI row.
+
+    unique_people counts distinct (camera node, track) pairs, so it is
+    per-camera: someone visible to two cameras counts twice here, the same
+    honesty caveat the aggregates carry.
+    """
+
+    since: datetime
+    until: datetime
+    total_detections: int
+    unique_people: int
+    avg_dwell_seconds: float | None
+    emotion_distribution: dict[str, int]
+    busiest_hour_start: datetime | None
+    busiest_hour_people: int
+
+
 class AggregateBucket(BaseModel):
     """One time-windowed rollup: counts, demographic/emotion distribution, and averages."""
 
     bucket_start: datetime
     detection_count: int
+    # Distinct people behind those events. A person present across a bucket
+    # contributes several events but one person, so the two diverge and the
+    # difference is meaningful rather than noise.
+    unique_people: int
     age_group_distribution: dict[str, int]
     gender_distribution: dict[str, int]
     emotion_distribution: dict[str, int]
