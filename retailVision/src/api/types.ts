@@ -35,6 +35,18 @@ export interface ZoneOccupancy {
   timestamp: string;
 }
 
+/** Headline figures over one time range. unique_people is per camera: overlap counts twice. */
+export interface Summary {
+  since: string;
+  until: string;
+  total_detections: number;
+  unique_people: number;
+  avg_dwell_seconds: number | null;
+  emotion_distribution: Record<string, number>;
+  busiest_hour_start: string | null;
+  busiest_hour_people: number;
+}
+
 export interface AggregateBucket {
   bucket_start: string;
   detection_count: number;

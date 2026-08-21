@@ -84,6 +84,24 @@ class ZoneOccupancyOut(BaseModel):
     timestamp: datetime
 
 
+class SummaryOut(BaseModel):
+    """Headline figures over one time range, for the dashboard's KPI row.
+
+    unique_people counts distinct (camera node, track) pairs, so it is
+    per-camera: someone visible to two cameras counts twice here, the same
+    honesty caveat the aggregates carry.
+    """
+
+    since: datetime
+    until: datetime
+    total_detections: int
+    unique_people: int
+    avg_dwell_seconds: float | None
+    emotion_distribution: dict[str, int]
+    busiest_hour_start: datetime | None
+    busiest_hour_people: int
+
+
 class AggregateBucket(BaseModel):
     """One time-windowed rollup: counts, demographic/emotion distribution, and averages."""
 

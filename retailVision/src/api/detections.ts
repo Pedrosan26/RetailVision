@@ -9,6 +9,7 @@ import type {
   Detection,
   DetectionFilters,
   Occupancy,
+  Summary,
   ZoneOccupancy,
 } from "./types";
 
@@ -30,4 +31,9 @@ export function fetchZoneOccupancy(): Promise<ZoneOccupancy[]> {
 /** Fetches time-windowed aggregate rollups. */
 export function fetchAggregates(filters: AggregateFilters = {}): Promise<AggregateBucket[]> {
   return apiGet<AggregateBucket[]>("/api/v1/aggregates", { ...filters });
+}
+
+/** Fetches the headline figures for one time range (default: server-side last 24h). */
+export function fetchSummary(params: { since?: string; zone_id?: string } = {}): Promise<Summary> {
+  return apiGet<Summary>("/api/v1/summary", { ...params });
 }

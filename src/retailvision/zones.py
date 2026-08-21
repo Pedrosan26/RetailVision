@@ -16,11 +16,16 @@ That removes the drift the virtual-line counter is prone to, where a
 missed crossing permanently skews the running total (see
 docs/people_counter.md).
 
-Corner ordering is derived, not configured: corners are sorted by angle
-around their centroid so that markers can be listed in any order, which
-assumes the zone is convex. Retail floor zones are effectively rectangles,
-so this trades a shape restriction that does not bite for a setup step
-that is easy to get wrong.
+The polygon is the convex hull of the markers' floor positions, not a
+ring visited in any configured order. Markers get taped up in whatever
+sequence is convenient, so neither their IDs nor their listing order says
+anything about which are physically adjacent -- and a marker whose floor
+position lands inside the shape the others form (an interior pillar, or
+survey noise pulling a wall marker inward) must not fold a dent into the
+perimeter. The hull is exactly "the fence around all the markers", which
+is what placing markers at a zone's edges means. The cost is that a
+deliberately concave zone cannot be expressed; retail floor areas are
+effectively rectangles, so that restriction does not bite.
 """
 
 from __future__ import annotations
@@ -44,6 +49,15 @@ from .marker_pose import MarkerPoseEstimator
 
 MIN_ZONE_MARKERS = 3
 
+# Faces are not all at one height: a seated face sits around 1.1-1.3m, a
+# standing one around 1.5-1.8m. Zone membership therefore tests the viewing
+# ray against the zone's vertical prism across this whole band, sampled at
+# several heights, rather than against a single plane -- a single plane
+# pushes anyone whose real face height differs from it radially along the
+# ray, far enough to land outside a zone they are standing inside.
+FACE_HEIGHT_BAND = (0.95, 1.85)
+FACE_HEIGHT_SAMPLES = 7
+
 
 @dataclass(frozen=True)
 class Zone:
@@ -60,11 +74,9 @@ def load_zones(path: str | Path) -> list[Zone]:
 
 
 def order_polygon(points: Iterable[tuple[float, float]]) -> np.ndarray:
-    """Sort points into a non-self-intersecting ring by angle around their centroid, assuming a convex shape."""
+    """Return the convex hull ring of the points -- the perimeter around them all, in whatever order they came."""
     array = np.array(list(points), dtype=np.float32)
-    centroid = array.mean(axis=0)
-    angles = np.arctan2(array[:, 1] - centroid[1], array[:, 0] - centroid[0])
-    return array[np.argsort(angles)]
+    return cv2.convexHull(array).reshape(-1, 2)
 
 
 class ZoneMap:
@@ -136,9 +148,13 @@ class ZoneResolver:
     zone polygons -- so callers hand over a frame and bounding boxes and get
     zone identities back.
 
-    A camera that cannot currently see a mapped marker resolves nothing rather
-    than guessing. Returning None keeps the "not known" case distinct from
-    "outside every zone", which the log schema also distinguishes.
+    A camera that has never seen a mapped marker resolves nothing rather than
+    guessing. Once localized, though, the pose is held through frames where no
+    marker is visible: these cameras are fixed installs, and the usual reason a
+    marker vanishes for a frame is a person walking in front of it -- exactly
+    the moment dropping every position would hurt most. The cost is that a
+    camera physically moved without a marker in view keeps reporting from its
+    old pose until it sees one again.
     """
 
     def __init__(
@@ -155,9 +171,10 @@ class ZoneResolver:
         self.camera_pose: np.ndarray | None = None
 
     def update(self, frame: np.ndarray) -> Localization:
-        """Re-localize the camera from the markers visible in this frame."""
+        """Re-localize the camera from the markers visible in this frame, holding the last good pose otherwise."""
         result = self.localizer.update(frame)
-        self.camera_pose = result.camera_pose
+        if result.camera_pose is not None:
+            self.camera_pose = result.camera_pose
         return result
 
     def world_position(self, bbox: tuple[int, int, int, int]) -> tuple[float, float] | None:
@@ -178,9 +195,30 @@ class ZoneResolver:
         )
 
     def zone_for_bbox(self, bbox: tuple[int, int, int, int]) -> str | None:
-        """Return the zone a detection falls in, or None if it is outside them all or the camera is not localized."""
-        position = self.world_position(bbox)
-        return None if position is None else self.zone_map.zone_for(position)
+        """Return the zone whose vertical prism the detection's viewing ray crosses at a plausible face height.
+
+        The face lies somewhere on the ray through its pixel; where exactly
+        depends on how tall the person is and whether they are seated, which a
+        single camera cannot tell. Sampling the ray across the plausible band
+        of face heights and accepting any sample inside the zone counts seated
+        and standing people alike. The reported world position stays the
+        configured head-height estimate: membership needs only "is the ray in
+        the prism", but a coordinate has to commit to one plane.
+        """
+        if self.camera_pose is None:
+            return None
+        x, y, width, height = bbox
+        pixel = (x + width / 2.0, y + height / 2.0)
+        low, high = FACE_HEIGHT_BAND
+        for step in range(FACE_HEIGHT_SAMPLES):
+            plane = low + (high - low) * step / (FACE_HEIGHT_SAMPLES - 1)
+            position = project_to_plane(pixel, self.camera_pose, self.localizer.estimator.calibration, plane_z=plane)
+            if position is None:
+                continue
+            zone_id = self.zone_map.zone_for(position)
+            if zone_id is not None:
+                return zone_id
+        return None
 
     def resolve(self, bboxes: list[tuple[int, int, int, int]]) -> list[str | None]:
         """Return one zone ID (or None) per bounding box, in the same order."""

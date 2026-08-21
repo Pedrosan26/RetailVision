@@ -2,16 +2,18 @@
 
 /* One token system for the whole dashboard.
  *
- * The neutrals carry a slight warm bias rather than the blue-grey most UI
- * defaults to, which keeps the blue accent doing the work of standing out
- * instead of competing with the background. Chart colours and interface
- * chrome are drawn from the same set deliberately: a chart wearing a
- * different palette to the panel around it reads as two systems bolted
- * together, which is what this replaced.
+ * The neutrals are a cool gray ramp on white surfaces -- the grammar of
+ * operations dashboards (monitoring tools, consoles), where the chrome is
+ * deliberately unremarkable so the numbers are the loudest thing on the
+ * page. One blue carries every interactive affordance; status colours are
+ * reserved for status. Chart colours and interface chrome are drawn from
+ * the same set deliberately: a chart wearing a different palette to the
+ * panel around it reads as two systems bolted together.
  *
- * Both modes are chosen, not derived. Dark is the same hues re-stepped for a
- * dark surface -- inverting a light palette drifts the series colours out of
- * the lightness band where they stay distinguishable to colour-blind readers.
+ * Both modes are chosen, not derived. Dark is the same roles re-stepped
+ * for a dark surface -- inverting a light palette drifts the series
+ * colours out of the lightness band where they stay distinguishable to
+ * colour-blind readers.
  *
  * Components reference these as arbitrary values (bg-[var(--app-surface)]),
  * so one class covers both modes and the values live in exactly one place.
@@ -22,89 +24,127 @@
   color-scheme: light;
 
   /* Planes, back to front. */
-  --app-page: #f4f3ef;
-  --app-surface: #fcfcfb;
+  --app-page: #f6f7f8;
+  --app-surface: #ffffff;
   --app-raised: #ffffff;
 
   /* Ink. */
-  --app-ink: #16150f;
-  --app-ink-secondary: #52514e;
-  --app-ink-muted: #898781;
+  --app-ink: #17191c;
+  --app-ink-secondary: #4b5259;
+  --app-ink-muted: #7d8590;
 
   /* Lines. Hairlines, deliberately quieter than the text they separate. */
-  --app-line: #e5e3dc;
-  --app-line-strong: #d4d2c9;
+  --app-line: #e3e6ea;
+  --app-line-strong: #ccd2d9;
 
   /* Accent, matching categorical slot 1 so a highlighted control and a
      leading data series are recognisably the same blue. */
-  --app-accent: #2a78d6;
+  --app-accent: #1f6feb;
   --app-accent-ink: #ffffff;
-  --app-accent-wash: #eaf1fc;
+  --app-accent-wash: #eaf2fd;
 
   /* Status. Reserved -- never reused as a series colour, and always paired
      with a label so meaning never rests on hue alone. */
-  --app-good: #0ca30c;
-  --app-warning: #fab219;
-  --app-critical: #d03b3b;
-  --app-critical-wash: #fdeceb;
+  --app-good: #1a7f37;
+  --app-warning: #9a6700;
+  --app-critical: #cf222e;
+  --app-critical-wash: #fdebec;
 
   /* Chart roles. */
-  --viz-surface: #fcfcfb;
-  --viz-ink: #16150f;
-  --viz-ink-secondary: #52514e;
-  --viz-ink-muted: #898781;
-  --viz-grid: #e5e3dc;
-  --viz-axis: #d4d2c9;
+  --viz-surface: #ffffff;
+  --viz-ink: #17191c;
+  --viz-ink-secondary: #4b5259;
+  --viz-ink-muted: #7d8590;
+  --viz-grid: #e9ebee;
+  --viz-axis: #ccd2d9;
 
-  --viz-series-1: #2a78d6;
-  --viz-series-2: #eb6834;
-  --viz-series-3: #1baf7a;
-  --viz-series-4: #eda100;
-  --viz-series-5: #e87ba4;
+  --viz-series-1: #1f6feb;
+  --viz-series-2: #e16f24;
+  --viz-series-3: #189e6e;
+  --viz-series-4: #b88700;
+  --viz-series-5: #d0679d;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     color-scheme: dark;
 
-    --app-page: #0d0d0c;
-    --app-surface: #1a1a19;
-    --app-raised: #232322;
+    --app-page: #0d1117;
+    --app-surface: #161b22;
+    --app-raised: #1c222b;
 
-    --app-ink: #f5f4ef;
-    --app-ink-secondary: #c3c2b7;
-    --app-ink-muted: #898781;
+    --app-ink: #e6edf3;
+    --app-ink-secondary: #a3aeb9;
+    --app-ink-muted: #768390;
 
-    --app-line: #2c2c2a;
-    --app-line-strong: #3b3b38;
+    --app-line: #262c34;
+    --app-line-strong: #3a424c;
 
-    --app-accent: #3987e5;
-    --app-accent-ink: #0d0d0c;
-    --app-accent-wash: #16283f;
+    --app-accent: #4493f8;
+    --app-accent-ink: #0d1117;
+    --app-accent-wash: #12233b;
 
-    --app-good: #0ca30c;
-    --app-warning: #fab219;
-    --app-critical: #e66767;
-    --app-critical-wash: #2e1a1a;
+    --app-good: #3fb950;
+    --app-warning: #d29922;
+    --app-critical: #f85149;
+    --app-critical-wash: #331b1d;
 
-    --viz-surface: #1a1a19;
-    --viz-ink: #f5f4ef;
-    --viz-ink-secondary: #c3c2b7;
-    --viz-ink-muted: #898781;
-    --viz-grid: #2c2c2a;
-    --viz-axis: #3b3b38;
+    --viz-surface: #161b22;
+    --viz-ink: #e6edf3;
+    --viz-ink-secondary: #a3aeb9;
+    --viz-ink-muted: #768390;
+    --viz-grid: #262c34;
+    --viz-axis: #3a424c;
 
-    --viz-series-1: #3987e5;
-    --viz-series-2: #d95926;
-    --viz-series-3: #199e70;
-    --viz-series-4: #c98500;
-    --viz-series-5: #d55181;
+    --viz-series-1: #4493f8;
+    --viz-series-2: #d0651a;
+    --viz-series-3: #17936a;
+    --viz-series-4: #b68a00;
+    --viz-series-5: #c85f92;
   }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --app-page: #0d1117;
+  --app-surface: #161b22;
+  --app-raised: #1c222b;
+
+  --app-ink: #e6edf3;
+  --app-ink-secondary: #a3aeb9;
+  --app-ink-muted: #768390;
+
+  --app-line: #262c34;
+  --app-line-strong: #3a424c;
+
+  --app-accent: #4493f8;
+  --app-accent-ink: #0d1117;
+  --app-accent-wash: #12233b;
+
+  --app-good: #3fb950;
+  --app-warning: #d29922;
+  --app-critical: #f85149;
+  --app-critical-wash: #331b1d;
+
+  --viz-surface: #161b22;
+  --viz-ink: #e6edf3;
+  --viz-ink-secondary: #a3aeb9;
+  --viz-ink-muted: #768390;
+  --viz-grid: #262c34;
+  --viz-axis: #3a424c;
+
+  --viz-series-1: #4493f8;
+  --viz-series-2: #d0651a;
+  --viz-series-3: #17936a;
+  --viz-series-4: #b68a00;
+  --viz-series-5: #c85f92;
 }
 
 body {
   background: var(--app-page);
   color: var(--app-ink);
+  font-feature-settings: "cv05";
 }
 
 /* Keyboard focus stays visible everywhere; the accent ring is the same blue

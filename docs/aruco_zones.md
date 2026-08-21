@@ -254,10 +254,14 @@ as that person's floor footprint, which is what the zone test needs.
   Averaging repeated observations, or a full pose-graph optimization,
   would reduce drift across a long chain of markers -- worth doing once
   that drift is actually measured to be a problem.
-- **Zones are assumed convex.** Corners are ordered by angle around their
-  centroid so that markers can be listed in any order, which trades a
-  shape restriction that does not bite for retail floor areas against a
-  setup step that is easy to get wrong.
+- **Zones are convex by construction.** The polygon is the convex hull of
+  the markers' floor positions -- the fence around them all -- so neither
+  marker IDs nor listing order have to match physical adjacency, and a
+  marker whose floor position lands inside the shape the others form
+  (survey noise, or a marker on an interior pillar) cannot fold a dent
+  into the perimeter. The cost is that a deliberately concave zone cannot
+  be expressed; retail floor areas are effectively rectangles, so that
+  restriction does not bite.
 - **Marker poses are not reconciled when chains meet.** Two cameras can
   reach the same marker by different routes; nothing detects or corrects a
   disagreement between them. A loop closure or bundle adjustment would,
@@ -371,6 +375,13 @@ Two consequences:
 - **Set `--head-height` to the posture you are actually measuring.** An
   office of seated people wants ~1.2m, not the 1.6m standing default. On
   the setup above that alone cut worst-case error from 1.50m to 0.50m.
+  This affects the reported *coordinate* only: zone *membership* no longer
+  rides on it. The face lies somewhere on the viewing ray, and where
+  depends on posture, so membership samples that ray across the whole
+  plausible band of face heights (0.95-1.85m) and accepts any sample
+  landing in a zone -- a standing person whose single-plane projection
+  overshoots the polygon still counts. A coordinate has to commit to one
+  plane; membership does not.
 - **Raise the cameras.** At 3.0m the same 10cm head-height error costs
   0.23m instead of 1.50m. Ceiling mounting is standard for this reason.
 

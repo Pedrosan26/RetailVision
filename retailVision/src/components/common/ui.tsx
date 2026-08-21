@@ -15,7 +15,7 @@ import type { ReactNode } from "react";
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
     <div
-      className={`rounded-lg border border-[var(--app-line)] bg-[var(--app-surface)] ${className}`}
+      className={`rounded-md border border-[var(--app-line)] bg-[var(--app-surface)] ${className}`}
     >
       {children}
     </div>
@@ -92,7 +92,7 @@ const TONE_STYLE: Record<Tone, string> = {
 export function Badge({ children, tone = "neutral" }: { children: ReactNode; tone?: Tone }) {
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[0.7rem] font-medium ${TONE_STYLE[tone]}`}
+      className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[0.7rem] font-medium ${TONE_STYLE[tone]}`}
     >
       {children}
     </span>
@@ -117,7 +117,7 @@ export function StatTile({
         {label}
       </div>
       <div className="mt-1 flex items-baseline gap-1.5">
-        <span className="text-3xl font-semibold text-[var(--app-ink)]">{value}</span>
+        <span className="text-2xl font-semibold tabular-nums tracking-tight text-[var(--app-ink)]">{value}</span>
         {unit && <span className="text-sm text-[var(--app-ink-muted)]">{unit}</span>}
       </div>
       {detail && <div className="mt-1 text-xs text-[var(--app-ink-muted)]">{detail}</div>}

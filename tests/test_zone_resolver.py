@@ -64,6 +64,15 @@ class TestZoneResolver(unittest.TestCase):
         self.assertIsNone(self.resolver.world_position((100, 100, 40, 40)))
         self.assertIsNone(self.resolver.zone_for_bbox((100, 100, 40, 40)))
 
+    def test_pose_is_held_through_a_frame_with_no_marker_visible(self) -> None:
+        """A person walking in front of the markers for a frame does not drop the camera's positions."""
+        self.localize()
+        held = self.resolver.camera_pose.copy()
+        self.resolver.update(blank_frame())
+        self.assertIsNotNone(self.resolver.camera_pose)
+        np.testing.assert_array_equal(self.resolver.camera_pose, held)
+        self.assertIsNotNone(self.resolver.world_position((100, 100, 40, 40)))
+
     def test_resolve_returns_one_entry_per_box_in_order(self) -> None:
         """Every bounding box gets exactly one answer, positionally matched to its input."""
         self.localize()
@@ -92,6 +101,33 @@ class TestZoneResolver(unittest.TestCase):
     def test_occupancy_is_empty_while_no_zone_is_ready(self) -> None:
         """Before a zone's markers are mapped there is nothing to count, and no zone is invented."""
         self.assertEqual(self.resolver.occupancy(["floor_zone"]), {})
+
+    def test_standing_face_missed_by_the_single_plane_is_still_in_the_zone(self) -> None:
+        """A face whose head-height-plane projection lands outside the zone is caught by the height band.
+
+        The single plane pushes a face at a different real height radially
+        along the ray; membership sampled across the band of plausible face
+        heights must not lose that person.
+        """
+        self.localize()
+        width, height = IMAGE_SIZE
+        # Scan pixel rows to find a box the single 1.6m plane places outside
+        # the zone while some band height places it inside -- the standing
+        # person case. The fixture guarantees such rows exist because the
+        # zone's far edge is within view.
+        from src.retailvision.marker_map import project_to_plane
+
+        found = None
+        for row in range(height // 4, height - 40, 8):
+            bbox = (width // 2 - 20, row, 40, 40)
+            single = self.resolver.world_position(bbox)
+            single_zone = None if single is None else self.resolver.zone_map.zone_for(single)
+            band_zone = self.resolver.zone_for_bbox(bbox)
+            if single_zone is None and band_zone is not None:
+                found = bbox
+                break
+        self.assertIsNotNone(found, "no pixel exercises the single-plane miss; fixture geometry changed")
+        self.assertEqual(self.resolver.zone_for_bbox(found), "floor_zone")
 
 
 class TestZoneIdInLogRecords(unittest.TestCase):

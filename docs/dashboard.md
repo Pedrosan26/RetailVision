@@ -181,11 +181,14 @@ reference them as Tailwind arbitrary values (`bg-[var(--app-surface)]`).
 One class therefore covers light and dark, rather than every element
 carrying a `dark:` twin, and a colour changes in exactly one place.
 
-The neutrals carry a slight warm bias rather than the blue-grey most UI
-defaults to, which leaves the blue accent doing the work of standing out
-instead of competing with the background. Interface and chart colours come
-from the same set deliberately: a chart wearing a different palette to the
-panel around it reads as two systems bolted together.
+The neutrals are a cool gray ramp on white surfaces -- the grammar of
+operations dashboards, where the chrome is deliberately unremarkable so
+the numbers are the loudest thing on the page. One blue carries every
+interactive affordance; status colours are reserved for status and always
+travel with a text label. Figures render in tabular numerals so columns
+of numbers align. Interface and chart colours come from the same set
+deliberately: a chart wearing a different palette to the panel around it
+reads as two systems bolted together.
 
 Both modes are chosen, not derived. Dark is the same hues re-stepped for a
 dark surface -- inverting a light palette drifts the series colours out of

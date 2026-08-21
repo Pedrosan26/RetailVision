@@ -70,6 +70,17 @@ window query (portable across Postgres and SQLite, unlike Postgres-only
 configuration starts populating `zone_id` -- no query change needed at
 that point.
 
+### `GET /api/v1/summary`
+
+Headline figures for one time range in one response: total events,
+distinct people, average dwell, the emotion mix, and the busiest hour
+(the hour-aligned bucket with the most distinct people). Query params:
+`since`/`until` (default: last 24h), `zone_id`. Backs the dashboard's
+KPI row; deriving these client-side from /aggregates would mean summing
+per-bucket unique-people counts, which overcounts anyone present across
+a bucket boundary. `unique_people` carries the same per-camera caveat as
+the aggregates: someone visible to two cameras counts twice.
+
 ### `GET /api/v1/aggregates`
 
 Time-windowed rollups: detection count, distinct people, age/gender/emotion

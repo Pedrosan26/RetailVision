@@ -271,7 +271,15 @@ def main() -> None:
         line_position = width / 2 if args.line_axis == "x" else height / 2
 
     pipeline = InferencePipeline()
-    tracker = CentroidTracker()
+    # The tracker's match radius is how far a person may move between frames
+    # and still be the same track. It is measured in pixels, so a fixed number
+    # only means something at one resolution -- the same physical motion covers
+    # three times as many pixels at 1920 wide as at 640. Expressed as a
+    # fraction of frame width it survives resolution changes: 0.15 is roughly
+    # half a metre of lateral motion at a few metres' range, generous enough
+    # for slow movement at low frame rates while staying under typical
+    # person-to-person spacing so two neighbours don't swap IDs.
+    tracker = CentroidTracker(max_distance=width * 0.15)
     registry = TrackRegistry()
     counter = LineCounter(axis=args.line_axis, position=line_position, entry_direction=args.line_direction)
     shipper = None
@@ -352,10 +360,10 @@ def main() -> None:
             if resolver is not None:
                 resolver.update(frame)
                 world_positions = [resolver.world_position(bbox) for bbox in bboxes]
-                zone_ids = [
-                    None if position is None else resolver.zone_map.zone_for(position)
-                    for position in world_positions
-                ]
+                # Membership tests the ray across the whole plausible band of
+                # face heights, so seated and standing people both land in the
+                # zone; the coordinate above stays committed to one plane.
+                zone_ids = [resolver.zone_for_bbox(bbox) for bbox in bboxes]
                 # Occupancy counts confirmed people, so a one-frame false
                 # positive never appears in a headcount it would inflate.
                 zone_counts = resolver.occupancy(

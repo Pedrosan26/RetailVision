@@ -22,8 +22,11 @@ export function CameraFeed({ cameraNodeId }: { cameraNodeId: string }) {
 
   if (isOffline) {
     return (
-      <div className="flex aspect-video w-full items-center justify-center rounded-md border border-[var(--app-line)] bg-[var(--app-page)] text-xs text-[var(--app-ink-muted)]">
-        {cameraNodeId} offline -- retrying…
+      <div className="flex aspect-video w-full flex-col items-center justify-center gap-1 rounded-md border border-[var(--app-line)] bg-[var(--app-page)] px-4 text-center text-xs text-[var(--app-ink-muted)]">
+        <span className="font-medium text-[var(--app-ink-secondary)]">{cameraNodeId}: no stream</span>
+        <span>
+          Node must run with <code className="font-mono">--stream-frames</code> to send video. Retrying…
+        </span>
       </div>
     );
   }

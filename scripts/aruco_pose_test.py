@@ -44,9 +44,20 @@ from src.retailvision.marker_map import (
 from src.retailvision.marker_pose import MarkerPoseEstimator, invert_pose
 from src.retailvision.zones import ZoneMap, load_zones
 
-AXIS_COLOR = (255, 200, 0)
-TEXT_COLOR = (0, 255, 0)
-WARN_COLOR = (0, 0, 255)
+# Overlay palette (BGR). Every piece of text is drawn twice -- a thick dark
+# underlay, then the colour -- because a single thin stroke disappears against
+# whatever the camera happens to be pointed at; see draw_label().
+MARKER_COLOR = (0, 255, 255)  # yellow: per-marker ID + distance labels
+ZONE_COLOR = (0, 165, 255)  # orange: zone outline + name
+TEXT_COLOR = (0, 255, 0)  # green: healthy status lines
+WARN_COLOR = (0, 0, 255)  # red: not-localized / error states
+OUTLINE_COLOR = (0, 0, 0)
+
+
+def draw_label(frame: np.ndarray, text: str, org: tuple[int, int], color: tuple[int, int, int], scale: float = 0.6) -> None:
+    """Draw text with a dark outline so it stays legible over any background."""
+    cv2.putText(frame, text, org, cv2.FONT_HERSHEY_SIMPLEX, scale, OUTLINE_COLOR, 4, cv2.LINE_AA)
+    cv2.putText(frame, text, org, cv2.FONT_HERSHEY_SIMPLEX, scale, color, 2, cv2.LINE_AA)
 
 # Requesting a resolution makes the backend rebuild the capture session, and on
 # macOS the camera can take several seconds to deliver its first frame after
@@ -200,28 +211,90 @@ def draw_markers(frame: np.ndarray, view: CameraView, poses: dict) -> None:
             frame, view.calibration.camera_matrix, view.calibration.dist_coeffs, pose.rvec, pose.tvec, view.estimator.marker_size / 2
         )
         center = pose.corners.mean(axis=0).astype(int)
-        cv2.putText(frame, f"{pose.marker_id}: {pose.distance_meters:.2f}m", (center[0] + 8, center[1]), cv2.FONT_HERSHEY_SIMPLEX, 0.6, AXIS_COLOR, 2)
+        draw_label(frame, f"{pose.marker_id}: {pose.distance_meters:.2f}m", (center[0] + 8, center[1]), MARKER_COLOR, scale=0.7)
+
+
+# A camera standing inside the zone -- the normal deployment -- always has
+# some polygon corners behind it, so the polygon is clipped to what the lens
+# can see rather than skipped whenever any corner is out of view. The lateral
+# bounds come from the calibration itself: the distortion polynomial is only
+# meaningful within the field of view it was fitted over, and points past it
+# fold back into the frame at meaningless positions, which draws as stray
+# lines crossing the image. A guessed constant is wrong per-lens; the camera
+# matrix says exactly where each frame edge is.
+ZONE_FILL_ALPHA = 0.22
+_NEAR_METERS = 0.05
+_FRUSTUM_MARGIN = 1.15  # keep slightly past the frame edge so edges leave the image cleanly
+
+
+def _clip(points: np.ndarray, signed_distance) -> np.ndarray:
+    """Sutherland-Hodgman: keep the part of a polygon where signed_distance >= 0."""
+    result = []
+    for index in range(len(points)):
+        a, b = points[index], points[(index + 1) % len(points)]
+        da, db = signed_distance(a), signed_distance(b)
+        if da >= 0:
+            result.append(a)
+        if (da >= 0) != (db >= 0):
+            result.append(a + (da / (da - db)) * (b - a))
+    return np.array(result)
+
+
+def visible_zone_pixels(view: CameraView, polygon: np.ndarray) -> np.ndarray | None:
+    """Project a zone's floor polygon into this view, clipped to the part the lens can actually see."""
+    world_to_camera = invert_pose(view.camera_pose)
+    corners = np.hstack([polygon, np.zeros((len(polygon), 1), dtype=np.float32)]).astype(np.float64)
+    in_camera = (world_to_camera[:3, :3] @ corners.T + world_to_camera[:3, 3].reshape(3, 1)).T
+
+    matrix = view.calibration.camera_matrix
+    width, height = view.calibration.image_size
+    fx, fy, cx, cy = matrix[0, 0], matrix[1, 1], matrix[0, 2], matrix[1, 2]
+    tan_left = (cx / fx) * _FRUSTUM_MARGIN
+    tan_right = ((width - cx) / fx) * _FRUSTUM_MARGIN
+    tan_up = (cy / fy) * _FRUSTUM_MARGIN
+    tan_down = ((height - cy) / fy) * _FRUSTUM_MARGIN
+
+    for bound in (
+        lambda p: p[2] - _NEAR_METERS,
+        lambda p: tan_right * p[2] - p[0],
+        lambda p: tan_left * p[2] + p[0],
+        lambda p: tan_down * p[2] - p[1],
+        lambda p: tan_up * p[2] + p[1],
+    ):
+        if len(in_camera) < 3:
+            return None
+        in_camera = _clip(in_camera, bound)
+    if len(in_camera) < 3:
+        return None
+
+    projected, _ = cv2.projectPoints(
+        in_camera.astype(np.float64), np.zeros(3), np.zeros(3),
+        view.calibration.camera_matrix, view.calibration.dist_coeffs,
+    )
+    return projected.reshape(-1, 2).astype(np.int32)
 
 
 def draw_zones(frame: np.ndarray, view: CameraView, zone_map: ZoneMap) -> None:
-    """Project every ready zone's world floor polygon back into this camera's view and outline it."""
+    """Shade every ready zone's visible floor area in this camera's view and outline it."""
     if view.camera_pose is None:
         return
-    world_to_camera = invert_pose(view.camera_pose)
-    rvec, _ = cv2.Rodrigues(world_to_camera[:3, :3])
-    tvec = world_to_camera[:3, 3]
-
     for zone_id in zone_map.ready_zone_ids():
-        polygon = zone_map.polygon(zone_id)
-        corners = np.hstack([polygon, np.zeros((len(polygon), 1), dtype=np.float32)]).astype(np.float64)
-        # Points behind the camera project to meaningless pixels, so only draw a
-        # zone this view is actually looking at.
-        if np.any((world_to_camera[:3, :3] @ corners.T + tvec.reshape(3, 1))[2] <= 0):
+        pixels = visible_zone_pixels(view, zone_map.polygon(zone_id))
+        if pixels is None:
             continue
-        projected, _ = cv2.projectPoints(corners, rvec, tvec, view.calibration.camera_matrix, view.calibration.dist_coeffs)
-        cv2.polylines(frame, [projected.reshape(-1, 2).astype(np.int32)], True, AXIS_COLOR, 2)
-        label_at = projected.reshape(-1, 2).astype(np.int32)[0]
-        cv2.putText(frame, zone_id, tuple(label_at), cv2.FONT_HERSHEY_SIMPLEX, 0.6, AXIS_COLOR, 2)
+        # A translucent fill reads as "this floor area" where a bare outline
+        # reads as unrelated lines crossing the room.
+        shaded = frame.copy()
+        cv2.fillPoly(shaded, [pixels], ZONE_COLOR)
+        cv2.addWeighted(shaded, ZONE_FILL_ALPHA, frame, 1 - ZONE_FILL_ALPHA, 0, frame)
+        cv2.polylines(frame, [pixels], True, ZONE_COLOR, 2)
+        height, width = frame.shape[:2]
+        label_at = pixels.mean(axis=0).astype(int)
+        draw_label(
+            frame, zone_id,
+            (int(np.clip(label_at[0], 10, width - 160)), int(np.clip(label_at[1], 20, height - 10))),
+            ZONE_COLOR,
+        )
 
 
 def resolve_click(view: CameraView, zone_map: ZoneMap | None, head_height: float) -> None:
@@ -252,6 +325,12 @@ def draw_status(frame: np.ndarray, view: CameraView, marker_map: MarkerMap, zone
         position = view.camera_pose[:3, 3]
         lines = [f"camera at ({position[0]:.2f}, {position[1]:.2f}, {position[2]:.2f})m"]
         color = TEXT_COLOR
+        # A camera below z=0 is below the floor, which is impossible: it means
+        # the world's datum is off, almost always a survey run without
+        # --marker-height, leaving z=0 at the anchor instead of the floor.
+        if position[2] < 0:
+            lines.append("camera is BELOW the floor -- re-run with --marker-height <anchor centre height>")
+            color = WARN_COLOR
 
     if view.reprojection_error is not None:
         lines.append(f"fit: {view.reprojection_error:.2f}px (under ~1px is healthy)")
@@ -265,7 +344,7 @@ def draw_status(frame: np.ndarray, view: CameraView, marker_map: MarkerMap, zone
         lines.append(view.click_label)
 
     for index, line in enumerate(lines):
-        cv2.putText(frame, line, (10, 30 + index * 26), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color if index == 0 else TEXT_COLOR, 2)
+        draw_label(frame, line, (10, 30 + index * 26), color if index == 0 else TEXT_COLOR)
 
 
 def print_marker_detail(view: "CameraView", marker_map: MarkerMap) -> None:

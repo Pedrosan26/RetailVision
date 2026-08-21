@@ -42,6 +42,13 @@ class TestOrderPolygon(unittest.TestCase):
         for side in sides:
             self.assertAlmostEqual(side, 2.0, places=5)
 
+    def test_interior_point_does_not_dent_the_perimeter(self) -> None:
+        """A marker whose floor position lands inside the others still yields the outer fence, not a folded ring."""
+        with_interior = [(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0), (1.0, 1.0)]
+        ordered = order_polygon(with_interior)
+        self.assertEqual(ordered.shape, (4, 2))
+        self.assertNotIn([1.0, 1.0], ordered.tolist())
+
 
 class TestZoneMap(unittest.TestCase):
     """Verify zone readiness, polygon construction and occupancy counting."""
