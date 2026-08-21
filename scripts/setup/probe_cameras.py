@@ -10,7 +10,7 @@ the backend will clamp to, and which common sizes are honored exactly --
 a camera silently substituting a nearby size is the failure mode worth
 catching before spending a calibration session on it.
 
-Usage: ./venv/bin/python3 scripts/probe_cameras.py
+Usage: ./venv/bin/python3 scripts/setup/probe_cameras.py
 """
 
 import cv2

@@ -14,7 +14,7 @@ or of distances between markers is ever required, only the marker's own
 printed size.
 
 Calibration itself is a one-off capture of a chessboard pattern held at
-many angles (see scripts/calibrate_camera.py); this module holds the
+many angles (see scripts/setup/calibrate_camera.py); this module holds the
 resulting model, the solver that produces it, and the chessboard geometry
 helpers that feed it.
 """

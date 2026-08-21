@@ -16,7 +16,7 @@ Do not trim that white margin off when cutting the printouts.
 Pose estimation measures against the black square only, so --marker-size
 elsewhere is the black square's side, not the paper's.
 
-Usage: PYTHONPATH=. ./venv/bin/python3 scripts/generate_aruco_markers.py --ids 0 1 2 3 --out markers/
+Usage: PYTHONPATH=. ./venv/bin/python3 scripts/setup/generate_aruco_markers.py --ids 0 1 2 3 --out markers/
 Print every marker at the same physical size and place one at each corner
 of the zone's floor area. Larger is markedly better for pose accuracy:
 measured on synthetic views, a 10cm marker is unreliable past about 4m,
