@@ -1,0 +1,27 @@
+{
+  "weights": "C:\\Users\\Pedro Sanchez\\Documents\\Github\\RetailVision\\models\\face_detection\\baseline.pt",
+  "overall_test_split_metrics": {
+    "mAP50": 0.7623,
+    "mAP50_95": 0.4175,
+    "precision": 0.8635,
+    "recall": 0.6754
+  },
+  "official_difficulty_recall": {
+    "easy": {
+      "images_evaluated": 1308,
+      "gt_faces": 3538,
+      "recall": 0.9418
+    },
+    "medium": {
+      "images_evaluated": 1517,
+      "gt_faces": 6527,
+      "recall": 0.8987
+    },
+    "hard": {
+      "images_evaluated": 1609,
+      "gt_faces": 15766,
+      "recall": 0.711
+    }
+  },
+  "loss_curve_plot": "C:\\Users\\Pedro Sanchez\\Documents\\Github\\RetailVision\\models\\face_detection\\baseline_loss_curves.png"
+}

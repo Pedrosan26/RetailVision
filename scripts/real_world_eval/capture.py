@@ -2,10 +2,10 @@
 capture.py
 
 Live camera capture loop for one condition session: detects faces with the
-existing Haar cascade FaceDetector, classifies each with the fine-tuned
-age/gender models, draws predictions (green if they match the supplied
-ground truth, red if not) on the preview window, and logs one row per
-frame to a CSV for later aggregation.
+existing FaceDetector, classifies each with the fine-tuned age/gender
+models, draws predictions (green if they match the supplied ground truth,
+red if not) on the preview window, and logs one row per frame to a CSV
+for later aggregation.
 """
 
 import csv
