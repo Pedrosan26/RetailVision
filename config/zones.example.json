@@ -1,0 +1,23 @@
+{
+  "_comment": [
+    "Zone definitions for marker-based occupancy. Copy to config/zones.json and edit.",
+    "Each zone lists the ArUco marker IDs physically placed at the corners of its floor area.",
+    "Marker order does not matter -- corners are sorted around their centroid, which assumes a convex zone.",
+    "A zone needs at least 3 markers, and only becomes active once every one of them has been mapped",
+    "by some camera, which is what lets two cameras each cover part of a zone neither of them sees whole.",
+    "One ID means one physical marker: never print two copies of the same ID and place them apart, since",
+    "the shared map treats an ID as a single location and would fuse the two into one wrong position.",
+    "Two zones that physically meet at a corner may both list that one marker's ID -- that is one marker",
+    "serving two zones, which is fine. Markers used only to bridge two cameras' views need no zone entry."
+  ],
+  "zones": [
+    {
+      "zone_id": "entrance",
+      "marker_ids": [0, 1, 2, 3]
+    },
+    {
+      "zone_id": "checkout",
+      "marker_ids": [4, 5, 6, 7]
+    }
+  ]
+}

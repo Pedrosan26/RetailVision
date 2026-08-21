@@ -22,10 +22,11 @@ The venv must be created with **Python 3.12** (via Homebrew's `python@3.12`), no
 PYTHONPATH=. ./venv/bin/python3 -m src.retailvision.pipeline_demo                       # live camera, full age/gender/emotion pipeline
 PYTHONPATH=. ./venv/bin/python3 -m src.retailvision.pipeline_demo --source path/to.mp4  # pre-recorded video file instead of live camera
 PYTHONPATH=. ./venv/bin/python3 -m src.retailvision.pipeline_demo --benchmark           # headless, prints average FPS on exit
+PYTHONPATH=. ./venv/bin/python3 -m src.retailvision.pipeline_demo --server-url http://localhost:8000 --camera-node-id laptop-01 --api-key <key>  # also ship records to a central server
 ./venv/bin/python3 -m src.retailvision.camera_test                                      # camera-only sanity check, no detection
 ```
 
-The live/video modes open a preview window; press `q` to quit. Currently reads only from the laptop's default camera (`cv2.VideoCapture(0)`) or a local video file; multi-camera support is planned but not yet implemented. See `docs/inference_pipeline.md` for the pipeline's architecture, design decisions, and FPS results.
+The live/video modes open a preview window; press `q` to quit. Each machine reads from its own default camera (`cv2.VideoCapture(0)`) or a local video file. Running more than one camera means running the pipeline on more than one machine (each is a "camera node") and optionally shipping their results to a central server — see `docs/multi_node.md`. See `docs/inference_pipeline.md` for the pipeline's architecture, design decisions, and FPS results.
 
 ```
 PYTHONPATH=. ./venv/bin/python3 -m unittest discover -s tests -v  # run the test suite
@@ -36,8 +37,33 @@ PYTHONPATH=. ./venv/bin/python3 -m unittest discover -s tests -v  # run the test
 - `src/retailvision/camera_test.py` — minimal camera-open/read sanity check.
 - `src/retailvision/detection.py` — `FaceDetector`, runs a YOLOv8 detection-mode model trained from scratch on WIDER FACE and fine-tuned for retail camera conditions. First stage of the pipeline.
 - `src/retailvision/inference.py` — `InferencePipeline`, combines `FaceDetector` with the fine-tuned age/gender and emotion classifiers into one per-frame call. See `docs/inference_pipeline.md`.
+- `src/retailvision/tracking.py` — `CentroidTracker`, assigns stable track IDs to detected faces across frames via nearest-centroid matching. See `docs/people_counter.md`.
+- `src/retailvision/counter.py` — `LineCounter`, detects virtual-line crossings from tracked centroids and maintains net occupancy and per-track dwell time. See `docs/people_counter.md`.
 - `src/retailvision/output_log.py` — privacy layer: converts each detection into an anonymized record (demographic/emotion labels only, never pixel data) and appends it as newline-delimited JSON to `data/inference_log.json`. Schema documented in `docs/schema.md`.
+- `src/retailvision/remote_log.py` — optional second sink: batches the same anonymized records and ships them to a central server in real time, for multi-node deployments. See `docs/multi_node.md`.
 - `src/retailvision/pipeline_demo.py` — wires capture (camera or video file) → `InferencePipeline` → live preview with drawn bounding boxes and predictions, or a headless FPS benchmark. Also logs every detection via `output_log.py`.
+
+## Server
+
+A separate FastAPI + TimescaleDB service (`server/`, its own venv/dependencies) receives anonymized records shipped by camera nodes, persists them, and serves recent-detections/live-occupancy/time-windowed-aggregate endpoints for the dashboard. See `docs/server.md` for the full setup, schema, and API details.
+
+```
+cp .env.example .env && docker compose up -d timescaledb       # TimescaleDB on localhost:5433 (not 5432, avoids clashing with a local Postgres)
+cd server && python3.12 -m venv venv && ./venv/bin/pip install -r requirements.txt
+cp .env.example .env && ./venv/bin/alembic upgrade head        # creates the detection_events hypertable
+./venv/bin/uvicorn app.main:app --reload --port 8000            # http://localhost:8000/docs for the API
+./venv/bin/python3 -m pytest tests/ -v                          # run the server's test suite
+```
+
+## Dashboard
+
+A React + TypeScript dashboard (`retailVision/`, its own `package.json`) reads the server's endpoints and shows live occupancy and recent detections, with per-zone views planned once zone config lands. See `docs/dashboard.md` for the full stack/layout details.
+
+```
+cd retailVision && nvm use && npm install    # requires Node 22, see docs/dashboard.md
+cp .env.example .env                          # VITE_API_BASE_URL, defaults to http://localhost:8000
+npm run dev                                    # http://localhost:5173, requires the server running
+```
 
 ## Dataset preparation
 
@@ -101,6 +127,7 @@ PYTHONPATH=scripts ./venv/bin/python3 scripts/evaluate_emotion_finetune.py  # pe
 - `scripts/emotion_finetune/` — fine-tune training package; reuses `emotion_baseline`'s evaluation/plotting helpers.
 - Final weights are saved to `models/emotion/final.pt`.
 - Neutral failed its 80% recall threshold across two fine-tuning iterations (67.6%, 67.3%) with confusion-matrix evidence of a structural neutral/sad overlap at FER-2013's 48×48 resolution. DeepFace's pre-trained emotion model was evaluated as an alternative (`scripts/evaluate_emotion_deepface.py`) but performed worse on every class (56.4% vs. our 69.7% overall) and was rejected. Our fine-tuned classifier remains production; Neutral (alongside Fear/Disgust) is accepted as a documented limitation. Full investigation: `docs/models/emotion_finetune.md`.
+- The live pipeline (`InferencePipeline._classify_emotion()` in `src/retailvision/inference.py`) collapses Angry/Disgust/Fear/Sad into a single `negative` output label — a post-hoc remap of the same 7-class classifier's predictions, not a retrain. Real-world evaluation showed Disgust and Fear collapsing almost entirely outside lab conditions (3.7%, 11.2% accuracy); reconstructing the confusion matrix for the merged label gives ~81% recall / ~87% precision, a large improvement over any of the four individually. Full data and the one caveat found (~20% of true Neutral leaks into `negative`): `docs/models/emotion_negative_consolidation.md`.
 
 ### Face detector
 
