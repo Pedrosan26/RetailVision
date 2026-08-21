@@ -246,6 +246,16 @@ def draw_counter(frame, counter: LineCounter, width: int, height: int) -> None:
     cv2.putText(frame, f"Occupancy: {counter.count}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
 
 
+def draw_counter(frame, counter: LineCounter, width: int, height: int) -> None:
+    """Draw the virtual counting line and the current occupancy count onto the frame."""
+    position = int(counter.position)
+    if counter.axis == "x":
+        cv2.line(frame, (position, 0), (position, height), (255, 0, 0), 2)
+    else:
+        cv2.line(frame, (0, position), (width, position), (255, 0, 0), 2)
+    cv2.putText(frame, f"Occupancy: {counter.count}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
+
+
 def main() -> None:
     """Run the inference pipeline over a camera or video source until 'q', EOF, or --duration elapses."""
     args = parse_args()
@@ -265,6 +275,10 @@ def main() -> None:
             "so every distance will be wrong and no detection will land inside a zone. "
             "Some cameras only run at their native resolution -- recalibrate this one there."
         )
+
+    line_position = args.line_position
+    if line_position is None:
+        line_position = width / 2 if args.line_axis == "x" else height / 2
 
     line_position = args.line_position
     if line_position is None:
