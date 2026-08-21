@@ -236,3 +236,21 @@ config/zones.json
 # room, so it is specific to that deployment (regenerate via
 # scripts/aruco_pose_test.py --save-map)
 config/marker_map.json
+
+# Working notes and agent instructions: useful locally, deliberately not
+# part of the published repository. README.md and RESULTS.md are the
+# documentation this project ships.
+docs/
+CLAUDE.md
+.claude/
+.agents/
+agent/
+calibration_commands.txt
+.DS_Store
+
+# Training/evaluation scratch output: checkpoints, per-epoch dumps, and
+# recorded evaluation frames (which contain images of real people). The
+# artifacts worth publishing -- reports, loss curves, confusion matrices --
+# are committed under models/ instead, next to the weights they describe.
+runs/
+skills-lock.json

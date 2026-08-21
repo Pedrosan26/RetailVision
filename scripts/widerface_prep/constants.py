@@ -26,7 +26,7 @@ CLASS_NAMES = ["face"]
 # dropped as unusable noise rather than real training signal -- WIDER FACE's
 # crowd-scene photography produces many near-degenerate annotations (down to
 # 0px) that a retail single-subject detector has no use for. See
-# docs/datasets/widerface.md for the measured size distribution behind this
+# the dataset's distribution_report.json for the size distribution behind this
 # choice.
 MIN_BOX_SIZE_PX = 8
 

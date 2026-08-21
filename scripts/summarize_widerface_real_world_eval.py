@@ -5,7 +5,7 @@ CLI entry point that aggregates every logged (condition, model) session
 under runs/widerface_real_world_eval/logs/ into a report: detection rate
 per condition per checkpoint, compared directly against the Haar
 cascade's own documented real-world detection rates
-(docs/model_evaluation.md), plus a false-positive rate for the dedicated
+(RESULTS.md), plus a false-positive rate for the dedicated
 no_person_background condition (any detection there is unambiguously a
 false positive, not a matter of degree).
 

@@ -8,7 +8,7 @@ a clean run with a lower learning rate and tuned augmentation, instead
 of compounding whatever the baseline run already converged to.
 
 Augmentation is tuned specifically for the domain gap documented in
-docs/datasets/widerface.md: WIDER FACE is dense crowd-scene photography
+the domain gap: WIDER FACE is dense crowd-scene photography
 (median annotated face is only 15px), while the retail camera use case
 this detector is ultimately built for expects one or a few large,
 prominent faces at close-to-medium range. Two changes target that gap
@@ -28,7 +28,7 @@ directly:
 
 degrees=10.0 is also added (baseline used the detection default, 0.0)
 for mild rotation robustness to camera angle / head tilt, matching the
-rationale already used for UTKFace's augmentation (docs/datasets/utkface.md).
+rationale already used for UTKFace's augmentation.
 """
 
 from pathlib import Path

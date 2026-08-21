@@ -1,6 +1,6 @@
 {
   "age": {
-    "weights": "/Users/pedrosan/Desktop/Github/RetailVision/models/age_gender/final_age.pt",
+    "weights": "models/age_gender/final_age.pt",
     "top_k_accuracy": {
       "top1_accuracy": 0.8877,
       "top5_accuracy": 1.0
@@ -45,10 +45,10 @@
         "support": 460
       }
     },
-    "loss_curve_plot": "/Users/pedrosan/Desktop/Github/RetailVision/models/age_gender/final_age_loss_curves.png"
+    "loss_curve_plot": "models/age_gender/final_age_loss_curves.png"
   },
   "gender": {
-    "weights": "/Users/pedrosan/Desktop/Github/RetailVision/models/age_gender/final_gender.pt",
+    "weights": "models/age_gender/final_gender.pt",
     "top_k_accuracy": {
       "top1_accuracy": 0.9634,
       "top5_accuracy": 1.0
@@ -69,6 +69,6 @@
         "support": 2514
       }
     },
-    "loss_curve_plot": "/Users/pedrosan/Desktop/Github/RetailVision/models/age_gender/final_gender_loss_curves.png"
+    "loss_curve_plot": "models/age_gender/final_gender_loss_curves.png"
   }
 }

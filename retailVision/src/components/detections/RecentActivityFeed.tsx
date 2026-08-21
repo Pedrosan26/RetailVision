@@ -1,5 +1,5 @@
 // Compact list of the most recent detections, for the Overview page.
-// The full filterable table is a separate page (RV-034).
+// The full per-person visit log is a separate page.
 
 import { useRecentDetections } from "../../hooks/useRecentDetections";
 import { ErrorState } from "../common/ErrorState";

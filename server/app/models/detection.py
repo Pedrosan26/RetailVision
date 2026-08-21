@@ -3,8 +3,8 @@ detection.py
 
 SQLAlchemy ORM model for the detection_events table -- one row per
 anonymized detection event received from a camera node. Column shape
-mirrors the log schema (see docs/schema.md in the repo
-root) plus two server-attributed columns, camera_node_id and
+mirrors the camera node's log schema (src/retailvision/output_log.py)
+plus two server-attributed columns, camera_node_id and
 ingested_at, that live outside that frozen client-side schema.
 
 id is declared as the sole SQLAlchemy-level primary key so the ORM's

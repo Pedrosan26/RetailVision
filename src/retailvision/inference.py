@@ -18,7 +18,7 @@ Emotion output collapses the classifier's angry/disgust/fear/sad classes
 into a single "negative" label -- happy/neutral/surprise pass through
 unchanged. The classifier itself is untouched (still 7-way internally);
 this is a post-hoc remap of its output. See
-docs/emotion_negative_consolidation.md for the data behind this decision.
+RESULTS.md for the data behind this decision.
 """
 
 from pathlib import Path
@@ -65,7 +65,7 @@ class InferencePipeline:
         return result.names[predicted_index], round(float(result.probs.top1conf), 4)
 
     def _classify_emotion(self, crop: np.ndarray) -> tuple[str, float]:
-        """Classify emotion, collapsing angry/disgust/fear/sad into "negative" -- see docs/emotion_negative_consolidation.md."""
+        """Classify emotion, collapsing angry/disgust/fear/sad into "negative" -- see RESULTS.md."""
         result = self.models["emotion"].predict(source=crop, device=self.device, verbose=False)[0]
         predicted_index = int(result.probs.top1)
         label = result.names[predicted_index]

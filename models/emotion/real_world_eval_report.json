@@ -1,0 +1,318 @@
+{
+  "test_set_overall_top1": 0.6969,
+  "test_set_per_class_recall": {
+    "angry": 0.6409,
+    "disgust": 0.6937,
+    "fear": 0.5234,
+    "happy": 0.8878,
+    "neutral": 0.6756,
+    "sad": 0.5477,
+    "surprise": 0.8231
+  },
+  "matrix": {
+    "close_1m": {
+      "angry": {
+        "total_frames": 72,
+        "faces_detected": 72,
+        "face_detection_rate": 1.0,
+        "emotion_accuracy": 0.9028,
+        "test_set_recall_for_this_emotion": 0.6409,
+        "emotion_degradation_vs_test_set": -0.2619
+      },
+      "disgust": {
+        "total_frames": 93,
+        "faces_detected": 84,
+        "face_detection_rate": 0.9032,
+        "emotion_accuracy": 0.0,
+        "test_set_recall_for_this_emotion": 0.6937,
+        "emotion_degradation_vs_test_set": 0.6937
+      },
+      "fear": {
+        "total_frames": 82,
+        "faces_detected": 82,
+        "face_detection_rate": 1.0,
+        "emotion_accuracy": 0.1463,
+        "test_set_recall_for_this_emotion": 0.5234,
+        "emotion_degradation_vs_test_set": 0.3771
+      },
+      "happy": {
+        "total_frames": 108,
+        "faces_detected": 107,
+        "face_detection_rate": 0.9907,
+        "emotion_accuracy": 0.8598,
+        "test_set_recall_for_this_emotion": 0.8878,
+        "emotion_degradation_vs_test_set": 0.028
+      },
+      "neutral": {
+        "total_frames": 109,
+        "faces_detected": 109,
+        "face_detection_rate": 1.0,
+        "emotion_accuracy": 0.9725,
+        "test_set_recall_for_this_emotion": 0.6756,
+        "emotion_degradation_vs_test_set": -0.2969
+      },
+      "sad": {
+        "total_frames": 78,
+        "faces_detected": 78,
+        "face_detection_rate": 1.0,
+        "emotion_accuracy": 0.6667,
+        "test_set_recall_for_this_emotion": 0.5477,
+        "emotion_degradation_vs_test_set": -0.119
+      },
+      "surprise": {
+        "total_frames": 97,
+        "faces_detected": 97,
+        "face_detection_rate": 1.0,
+        "emotion_accuracy": 0.8041,
+        "test_set_recall_for_this_emotion": 0.8231,
+        "emotion_degradation_vs_test_set": 0.019
+      }
+    },
+    "far_4m": {
+      "angry": {
+        "total_frames": 110,
+        "faces_detected": 104,
+        "face_detection_rate": 0.9455,
+        "emotion_accuracy": 0.5577,
+        "test_set_recall_for_this_emotion": 0.6409,
+        "emotion_degradation_vs_test_set": 0.0832
+      },
+      "disgust": {
+        "total_frames": 115,
+        "faces_detected": 97,
+        "face_detection_rate": 0.8435,
+        "emotion_accuracy": 0.0206,
+        "test_set_recall_for_this_emotion": 0.6937,
+        "emotion_degradation_vs_test_set": 0.6731
+      },
+      "fear": {
+        "total_frames": 105,
+        "faces_detected": 90,
+        "face_detection_rate": 0.8571,
+        "emotion_accuracy": 0.0333,
+        "test_set_recall_for_this_emotion": 0.5234,
+        "emotion_degradation_vs_test_set": 0.4901
+      },
+      "happy": {
+        "total_frames": 165,
+        "faces_detected": 150,
+        "face_detection_rate": 0.9091,
+        "emotion_accuracy": 0.8733,
+        "test_set_recall_for_this_emotion": 0.8878,
+        "emotion_degradation_vs_test_set": 0.0145
+      },
+      "neutral": {
+        "total_frames": 152,
+        "faces_detected": 151,
+        "face_detection_rate": 0.9934,
+        "emotion_accuracy": 0.5166,
+        "test_set_recall_for_this_emotion": 0.6756,
+        "emotion_degradation_vs_test_set": 0.159
+      },
+      "sad": {
+        "total_frames": 131,
+        "faces_detected": 128,
+        "face_detection_rate": 0.9771,
+        "emotion_accuracy": 0.1094,
+        "test_set_recall_for_this_emotion": 0.5477,
+        "emotion_degradation_vs_test_set": 0.4383
+      },
+      "surprise": {
+        "total_frames": 150,
+        "faces_detected": 142,
+        "face_detection_rate": 0.9467,
+        "emotion_accuracy": 0.4437,
+        "test_set_recall_for_this_emotion": 0.8231,
+        "emotion_degradation_vs_test_set": 0.3794
+      }
+    },
+    "looking_down": {
+      "happy": {
+        "total_frames": 229,
+        "faces_detected": 106,
+        "face_detection_rate": 0.4629,
+        "emotion_accuracy": 0.6604,
+        "test_set_recall_for_this_emotion": 0.8878,
+        "emotion_degradation_vs_test_set": 0.2274
+      }
+    },
+    "medium_2m": {
+      "angry": {
+        "total_frames": 97,
+        "faces_detected": 97,
+        "face_detection_rate": 1.0,
+        "emotion_accuracy": 0.7629,
+        "test_set_recall_for_this_emotion": 0.6409,
+        "emotion_degradation_vs_test_set": -0.122
+      },
+      "disgust": {
+        "total_frames": 115,
+        "faces_detected": 110,
+        "face_detection_rate": 0.9565,
+        "emotion_accuracy": 0.1273,
+        "test_set_recall_for_this_emotion": 0.6937,
+        "emotion_degradation_vs_test_set": 0.5664
+      },
+      "fear": {
+        "total_frames": 99,
+        "faces_detected": 96,
+        "face_detection_rate": 0.9697,
+        "emotion_accuracy": 0.1562,
+        "test_set_recall_for_this_emotion": 0.5234,
+        "emotion_degradation_vs_test_set": 0.3672
+      },
+      "happy": {
+        "total_frames": 141,
+        "faces_detected": 141,
+        "face_detection_rate": 1.0,
+        "emotion_accuracy": 0.8511,
+        "test_set_recall_for_this_emotion": 0.8878,
+        "emotion_degradation_vs_test_set": 0.0367
+      },
+      "neutral": {
+        "total_frames": 76,
+        "faces_detected": 76,
+        "face_detection_rate": 1.0,
+        "emotion_accuracy": 0.9868,
+        "test_set_recall_for_this_emotion": 0.6756,
+        "emotion_degradation_vs_test_set": -0.3112
+      },
+      "sad": {
+        "total_frames": 124,
+        "faces_detected": 120,
+        "face_detection_rate": 0.9677,
+        "emotion_accuracy": 0.25,
+        "test_set_recall_for_this_emotion": 0.5477,
+        "emotion_degradation_vs_test_set": 0.2977
+      },
+      "surprise": {
+        "total_frames": 87,
+        "faces_detected": 87,
+        "face_detection_rate": 1.0,
+        "emotion_accuracy": 0.5632,
+        "test_set_recall_for_this_emotion": 0.8231,
+        "emotion_degradation_vs_test_set": 0.2599
+      }
+    },
+    "side_view": {
+      "angry": {
+        "total_frames": 273,
+        "faces_detected": 29,
+        "face_detection_rate": 0.1062,
+        "emotion_accuracy": 0.0345,
+        "test_set_recall_for_this_emotion": 0.6409,
+        "emotion_degradation_vs_test_set": 0.6064
+      },
+      "disgust": {
+        "total_frames": 100,
+        "faces_detected": 20,
+        "face_detection_rate": 0.2,
+        "emotion_accuracy": 0.0,
+        "test_set_recall_for_this_emotion": 0.6937,
+        "emotion_degradation_vs_test_set": 0.6937
+      },
+      "happy": {
+        "total_frames": 216,
+        "faces_detected": 109,
+        "face_detection_rate": 0.5046,
+        "emotion_accuracy": 0.789,
+        "test_set_recall_for_this_emotion": 0.8878,
+        "emotion_degradation_vs_test_set": 0.0988
+      }
+    }
+  },
+  "condition_averages": {
+    "close_1m": {
+      "mean_accuracy": 0.6217,
+      "mean_degradation": 0.0629,
+      "emotions_tested": [
+        "angry",
+        "disgust",
+        "fear",
+        "happy",
+        "neutral",
+        "sad",
+        "surprise"
+      ]
+    },
+    "far_4m": {
+      "mean_accuracy": 0.3649,
+      "mean_degradation": 0.3197,
+      "emotions_tested": [
+        "angry",
+        "disgust",
+        "fear",
+        "happy",
+        "neutral",
+        "sad",
+        "surprise"
+      ]
+    },
+    "looking_down": {
+      "mean_accuracy": 0.6604,
+      "mean_degradation": 0.2274,
+      "emotions_tested": [
+        "happy"
+      ]
+    },
+    "medium_2m": {
+      "mean_accuracy": 0.5282,
+      "mean_degradation": 0.1564,
+      "emotions_tested": [
+        "angry",
+        "disgust",
+        "fear",
+        "happy",
+        "neutral",
+        "sad",
+        "surprise"
+      ]
+    },
+    "side_view": {
+      "mean_accuracy": 0.2745,
+      "mean_degradation": 0.4663,
+      "emotions_tested": [
+        "angry",
+        "disgust",
+        "happy"
+      ]
+    }
+  },
+  "emotion_averages": {
+    "angry": {
+      "mean_accuracy": 0.5645,
+      "mean_degradation": 0.0764,
+      "conditions_tested": 4
+    },
+    "disgust": {
+      "mean_accuracy": 0.037,
+      "mean_degradation": 0.6567,
+      "conditions_tested": 4
+    },
+    "fear": {
+      "mean_accuracy": 0.1119,
+      "mean_degradation": 0.4115,
+      "conditions_tested": 3
+    },
+    "happy": {
+      "mean_accuracy": 0.8067,
+      "mean_degradation": 0.0811,
+      "conditions_tested": 5
+    },
+    "neutral": {
+      "mean_accuracy": 0.8253,
+      "mean_degradation": -0.1497,
+      "conditions_tested": 3
+    },
+    "sad": {
+      "mean_accuracy": 0.342,
+      "mean_degradation": 0.2057,
+      "conditions_tested": 3
+    },
+    "surprise": {
+      "mean_accuracy": 0.6037,
+      "mean_degradation": 0.2194,
+      "conditions_tested": 3
+    }
+  }
+}

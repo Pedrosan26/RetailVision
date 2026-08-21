@@ -9,7 +9,7 @@ held-out test-set accuracy (models/age_gender/final_report.json) to
 quantify degradation, and writes the combined numbers to
 models/age_gender/real_world_eval_report.json. Use this report as the
 data source when writing the per-condition analysis and known-failure-case
-list into docs/model_evaluation.md.
+list in RESULTS.md.
 
 Usage: PYTHONPATH=.:scripts ./venv/bin/python3 scripts/summarize_real_world_eval.py
 """

@@ -8,7 +8,7 @@ evaluated on, for a direct, apples-to-apples comparison. This fallback was
 triggered because two fine-tuning iterations of our own classifier both
 failed the 80% Neutral recall threshold, with confusion-matrix evidence
 pointing to a structural neutral/sad overlap rather than a fixable tuning
-problem — see docs/models/emotion_finetune.md for the full iteration
+problem — see RESULTS.md for the full iteration
 history.
 
 `detector_backend="skip"` and `enforce_detection=False` are used since

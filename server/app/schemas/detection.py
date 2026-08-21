@@ -2,7 +2,7 @@
 detection.py
 
 Pydantic request/response models for the ingestion and read endpoints.
-DetectionRecord mirrors the log schema exactly -- see docs/schema.md in
+DetectionRecord mirrors the log schema exactly -- see output_log.py in
 the repo root.
 """
 

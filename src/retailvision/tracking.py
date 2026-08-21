@@ -7,7 +7,7 @@ matched optimally per frame with the Hungarian algorithm. This is
 deliberately simpler than a full tracker like ByteTrack (no motion model,
 no re-identification after a long occlusion) -- centroid tracking is
 sufficient for a single virtual-line crossing counter; ByteTrack is
-documented future work (see docs/future_work/) for when multi-zone
+deliberate future work for when multi-zone
 polygon tracking is actually needed.
 """
 
