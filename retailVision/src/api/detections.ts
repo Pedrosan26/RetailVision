@@ -10,6 +10,9 @@ import type {
   DetectionFilters,
   Occupancy,
   Summary,
+  Visit,
+  VisitFilters,
+  ZoneGeometry,
   ZoneOccupancy,
 } from "./types";
 
@@ -34,6 +37,18 @@ export function fetchAggregates(filters: AggregateFilters = {}): Promise<Aggrega
 }
 
 /** Fetches the headline figures for one time range (default: server-side last 24h). */
-export function fetchSummary(params: { since?: string; zone_id?: string } = {}): Promise<Summary> {
+export function fetchSummary(
+  params: { since?: string; until?: string; zone_id?: string } = {},
+): Promise<Summary> {
   return apiGet<Summary>("/api/v1/summary", { ...params });
+}
+
+/** Fetches per-person visits, newest first, optionally filtered. */
+export function fetchVisits(filters: VisitFilters = {}): Promise<Visit[]> {
+  return apiGet<Visit[]>("/api/v1/visits", { ...filters });
+}
+
+/** Fetches every zone's floor polygon, as uploaded by the camera nodes. */
+export function fetchZoneGeometry(): Promise<ZoneGeometry[]> {
+  return apiGet<ZoneGeometry[]>("/api/v1/zones/geometry");
 }

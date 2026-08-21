@@ -9,7 +9,7 @@ import { NavLink } from "react-router-dom";
 const NAV_ITEMS = [
   { to: "/", label: "Overview", hint: "Live view", end: true },
   { to: "/zones", label: "Zones", hint: "Per-area history" },
-  { to: "/detections", label: "Detections", hint: "Event log" },
+  { to: "/detections", label: "Visits", hint: "One row per person" },
 ];
 
 /** Renders the sidebar nav, highlighting the currently active route. */

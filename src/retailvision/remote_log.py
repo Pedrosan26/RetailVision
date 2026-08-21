@@ -73,6 +73,28 @@ class RemoteLogShipper:
         if len(self._buffer) >= self._batch_size or elapsed >= self._flush_interval:
             self.flush()
 
+    def ship_zone_geometry(self, zones: list[dict]) -> None:
+        """POST the node's zone polygons to the server, once at startup.
+
+        The polygons come from the surveyed marker map, which only the nodes
+        have; the server needs them to draw the floor map that world positions
+        land on. Synchronous and best-effort: a failure costs the dashboard
+        its floor outline, not the pipeline any frames, and the next node
+        restart retries naturally.
+        """
+        if not zones:
+            return
+        url = self._ingest_url.replace("/ingest", "/zones/geometry")
+        payload = {"camera_node_id": self._camera_node_id, "zones": zones}
+        try:
+            response = requests.post(
+                url, json=payload, headers={"X-API-Key": self._api_key}, timeout=self._request_timeout
+            )
+            response.raise_for_status()
+            print(f"Shipped zone geometry for {[z['zone_id'] for z in zones]} to {url}.")
+        except requests.RequestException as exc:
+            print(f"Warning: failed to ship zone geometry to {url}: {exc}")
+
     def flush(self) -> None:
         """Submit all currently buffered records for delivery in one batch and clear the buffer."""
         if not self._buffer:

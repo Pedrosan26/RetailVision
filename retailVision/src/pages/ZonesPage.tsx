@@ -20,6 +20,8 @@ import {
   SectionHeading,
   StatTile,
 } from "../components/common/ui";
+import { ArrangeableSections } from "../components/common/ArrangeableSections";
+import { ZoneHeatmap } from "../components/occupancy/ZoneHeatmap";
 import { useZoneOccupancy } from "../hooks/useZoneOccupancy";
 
 // A zone whose newest record is older than this is not reporting any more.
@@ -87,6 +89,12 @@ export function ZonesPage() {
         }
       />
 
+      <ArrangeableSections
+        page="zones"
+        sections={[
+          {
+            id: "status",
+            children: (
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[18rem_1fr]">
         <Card className="p-4">
           <div className="flex items-start justify-between">
@@ -160,11 +168,34 @@ export function ZonesPage() {
           </div>
         </Card>
       </div>
-
-      <section>
-        <SectionHeading hint={`Filtered to ${zone.zone_id}.`}>History</SectionHeading>
-        <HistoricalCharts zoneId={zone.zone_id} />
-      </section>
+            ),
+          },
+          {
+            id: "floor map",
+            children: (
+              <>
+                <SectionHeading hint="Where people accumulate, and who is there right now. Positions carry the head-height assumption.">
+                  Floor map
+                </SectionHeading>
+                <Card>
+                  <div className="p-4">
+                    <ZoneHeatmap zoneId={zone.zone_id} />
+                  </div>
+                </Card>
+              </>
+            ),
+          },
+          {
+            id: "history",
+            children: (
+              <>
+                <SectionHeading hint={`Filtered to ${zone.zone_id}.`}>History</SectionHeading>
+                <HistoricalCharts zoneId={zone.zone_id} />
+              </>
+            ),
+          },
+        ]}
+      />
     </div>
   );
 }

@@ -73,13 +73,38 @@ that point.
 ### `GET /api/v1/summary`
 
 Headline figures for one time range in one response: total events,
-distinct people, average dwell, the emotion mix, and the busiest hour
-(the hour-aligned bucket with the most distinct people). Query params:
+distinct people, average dwell, the emotion mix, the busiest hour
+(the hour-aligned bucket with the most distinct people), and
+`peak_occupancy` -- the largest node-reported headcount at any single
+moment, deduplicated the way the node deduplicated it rather than
+summed across cameras. Query params:
 `since`/`until` (default: last 24h), `zone_id`. Backs the dashboard's
 KPI row; deriving these client-side from /aggregates would mean summing
 per-bucket unique-people counts, which overcounts anyone present across
 a bucket boundary. `unique_people` carries the same per-camera caveat as
 the aggregates: someone visible to two cameras counts twice.
+
+### `GET /api/v1/visits`
+
+Detection events folded into one row per person: per (camera node,
+track), first/last sighting, duration, mode zone, the settled age and
+gender, and the emotion mix with its dominant label. Query params:
+`since`/`until` (default: last 24h), `zone_id`, `camera_node_id`,
+`limit` (default 200, newest last-seen first). Rows without a
+`track_id` are excluded rather than surfacing as hundreds of one-event
+visits. Duration spans first to last record; emission is change-driven
+with a 10s heartbeat, so it understates a stay by at most that
+heartbeat. Backs the dashboard's Visits page.
+
+### `POST /api/v1/zones/geometry` / `GET /api/v1/zones/geometry`
+
+Zone floor polygons, in world meters. The polygon is computed on the
+nodes from the surveyed marker map, which the server never sees, so each
+node uploads its ready zones' geometry once at startup (authenticated
+like ingest); the dashboard reads it back to draw the floor map that
+world positions land on. One row per zone, last writer wins -- every
+node loads the same surveyed map file, so a disagreement means a stale
+node rather than a conflict worth merging.
 
 ### `GET /api/v1/aggregates`
 

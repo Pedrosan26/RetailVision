@@ -8,6 +8,8 @@
 // make the live view slower to read.
 
 import { CameraFeedGrid } from "../components/cameras/CameraFeedGrid";
+import { AlertSettings } from "../components/common/AlertBanner";
+import { ArrangeableSections } from "../components/common/ArrangeableSections";
 import { RecentActivityFeed } from "../components/detections/RecentActivityFeed";
 import { Card, CardHeader, LiveDot, PageHeader, SectionHeading } from "../components/common/ui";
 import { KpiRow } from "../components/occupancy/KpiRow";
@@ -51,32 +53,63 @@ export function OverviewPage() {
 
       <KpiRow />
 
-      <section>
-        <SectionHeading hint="Someone visible to several cameras is counted once.">
-          People per zone
-        </SectionHeading>
-        <ZoneOccupancyGrid />
-      </section>
-
-      <section>
-        <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-          <SectionHeading hint="Frames leave a camera node only while it runs with --stream-frames.">
-            Camera feeds
-          </SectionHeading>
-          <CameraStatusRow />
-        </div>
-        <CameraFeedGrid />
-      </section>
-
-      <section>
-        <SectionHeading>Recent activity</SectionHeading>
-        <Card>
-          <CardHeader title="Latest detections" description="Newest first, across all cameras." />
-          <div className="px-4">
-            <RecentActivityFeed />
-          </div>
-        </Card>
-      </section>
+      <ArrangeableSections
+        page="overview"
+        sections={[
+          {
+            id: "zones",
+            children: (
+              <>
+                <SectionHeading hint="Someone visible to several cameras is counted once.">
+                  People per zone
+                </SectionHeading>
+                <ZoneOccupancyGrid />
+              </>
+            ),
+          },
+          {
+            id: "cameras",
+            children: (
+              <>
+                <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2 pr-16">
+                  <SectionHeading hint="Frames leave a camera node only while it runs with --stream-frames.">
+                    Camera feeds
+                  </SectionHeading>
+                  <CameraStatusRow />
+                </div>
+                <CameraFeedGrid />
+              </>
+            ),
+          },
+          {
+            id: "activity",
+            children: (
+              <>
+                <SectionHeading>Recent activity</SectionHeading>
+                <Card>
+                  <CardHeader title="Latest detections" description="Newest first, across all cameras." />
+                  <div className="px-4">
+                    <RecentActivityFeed />
+                  </div>
+                </Card>
+              </>
+            ),
+          },
+          {
+            id: "alerts",
+            children: (
+              <>
+                <SectionHeading hint="Fires a banner on every page once the condition has held. Saved in this browser.">
+                  Alerts
+                </SectionHeading>
+                <Card className="p-4">
+                  <AlertSettings />
+                </Card>
+              </>
+            ),
+          },
+        ]}
+      />
     </div>
   );
 }

@@ -45,6 +45,39 @@ export interface Summary {
   emotion_distribution: Record<string, number>;
   busiest_hour_start: string | null;
   busiest_hour_people: number;
+  /** Largest node-reported headcount at any single moment in the range. */
+  peak_occupancy: number;
+}
+
+/** One person's visit as seen by one camera: their track's records folded into a single row. */
+export interface Visit {
+  camera_node_id: string;
+  track_id: string;
+  first_seen: string;
+  last_seen: string;
+  duration_seconds: number;
+  zone_id: string | null;
+  age_group: string;
+  gender: string;
+  dominant_emotion: string;
+  emotion_distribution: Record<string, number>;
+  events: number;
+}
+
+/** A zone's floor polygon in world meters, uploaded by a camera node at startup. */
+export interface ZoneGeometry {
+  zone_id: string;
+  camera_node_id: string;
+  polygon: Array<[number, number]>;
+  updated_at: string;
+}
+
+export interface VisitFilters {
+  since?: string;
+  until?: string;
+  zone_id?: string;
+  camera_node_id?: string;
+  limit?: number;
 }
 
 export interface AggregateBucket {

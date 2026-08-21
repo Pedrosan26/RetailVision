@@ -9,15 +9,26 @@
 // colouring them differently would imply a distinction that is not there.
 
 export interface DistributionBarsProps {
-  /** Category name to count. Rendered largest first. */
+  /** Category name to count. */
   distribution: Record<string, number>;
   /** Shown when every category is absent. */
   emptyLabel?: string;
+  /**
+   * "value" (default) renders largest first, right for unordered categories.
+   * "given" keeps insertion order, for categories that are themselves a scale
+   * -- duration buckets, hours -- where sorting by size would shuffle the axis.
+   */
+  order?: "value" | "given";
 }
 
-/** Renders a labelled horizontal bar per category, largest first. */
-export function DistributionBars({ distribution, emptyLabel = "No data in this range." }: DistributionBarsProps) {
-  const entries = Object.entries(distribution).sort(([, a], [, b]) => b - a);
+/** Renders a labelled horizontal bar per category. */
+export function DistributionBars({
+  distribution,
+  emptyLabel = "No data in this range.",
+  order = "value",
+}: DistributionBarsProps) {
+  const entries = Object.entries(distribution);
+  if (order === "value") entries.sort(([, a], [, b]) => b - a);
   const total = entries.reduce((sum, [, count]) => sum + count, 0);
 
   if (entries.length === 0 || total === 0) {

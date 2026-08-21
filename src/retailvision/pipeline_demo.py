@@ -246,16 +246,6 @@ def draw_counter(frame, counter: LineCounter, width: int, height: int) -> None:
     cv2.putText(frame, f"Occupancy: {counter.count}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
 
 
-def draw_counter(frame, counter: LineCounter, width: int, height: int) -> None:
-    """Draw the virtual counting line and the current occupancy count onto the frame."""
-    position = int(counter.position)
-    if counter.axis == "x":
-        cv2.line(frame, (position, 0), (position, height), (255, 0, 0), 2)
-    else:
-        cv2.line(frame, (0, position), (width, position), (255, 0, 0), 2)
-    cv2.putText(frame, f"Occupancy: {counter.count}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
-
-
 def main() -> None:
     """Run the inference pipeline over a camera or video source until 'q', EOF, or --duration elapses."""
     args = parse_args()
@@ -275,10 +265,6 @@ def main() -> None:
             "so every distance will be wrong and no detection will land inside a zone. "
             "Some cameras only run at their native resolution -- recalibrate this one there."
         )
-
-    line_position = args.line_position
-    if line_position is None:
-        line_position = width / 2 if args.line_axis == "x" else height / 2
 
     line_position = args.line_position
     if line_position is None:
@@ -319,6 +305,16 @@ def main() -> None:
         )
         resolver = ZoneResolver(estimator, marker_map, ZoneMap(zones, marker_map), head_height=args.head_height)
         print(f"Zone occupancy enabled: {[z.zone_id for z in zones]} from {args.zones}.")
+        # The server never sees the marker map, so it learns each zone's floor
+        # shape from the nodes -- shipped once here, at startup, for the
+        # dashboard's floor map.
+        if shipper is not None:
+            shipper.ship_zone_geometry(
+                [
+                    {"zone_id": zone_id, "polygon": resolver.zone_map.polygon(zone_id).tolist()}
+                    for zone_id in resolver.zone_map.ready_zone_ids()
+                ]
+            )
 
     streamer = None
     if args.stream_frames:

@@ -74,4 +74,7 @@ async def get_summary(
         emotion_distribution=dict(Counter(e.emotion for e in events)),
         busiest_hour_start=None if busiest_index is None else range_since + busiest_index * HOUR,
         busiest_hour_people=0 if busiest_index is None else len(per_hour[busiest_index]),
+        # The node's own deduplicated headcount at each record's moment, so its
+        # maximum is a real "most people at once", not a sum across cameras.
+        peak_occupancy=max((e.count for e in events if e.count is not None), default=0),
     )

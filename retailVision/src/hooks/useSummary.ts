@@ -8,7 +8,7 @@ import { fetchSummary } from "../api/detections";
 const POLL_INTERVAL_MS = 30000;
 
 /** Returns the summary figures for a time range, refetched on an interval. */
-export function useSummary(params: { since?: string; zone_id?: string } = {}) {
+export function useSummary(params: { since?: string; until?: string; zone_id?: string } = {}) {
   return useQuery({
     queryKey: ["summary", params],
     queryFn: () => fetchSummary(params),

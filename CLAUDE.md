@@ -64,7 +64,7 @@ Layout:
 retailVision/
   src/
     api/        client.ts (fetch wrapper), detections.ts (endpoint calls), types.ts (mirrors server Pydantic response models)
-    hooks/      useLiveOccupancy, useRecentDetections, useAggregates, useSummary -- TanStack Query, polling on an interval
+    hooks/      useLiveOccupancy, useRecentDetections, useAggregates, useSummary, useVisits, useZoneGeometry, useOccupancyAlert -- TanStack Query, polling on an interval
     store/      uiStore.ts -- Zustand, UI-only state
     components/
       layout/     AppShell (sidebar + routed content), Sidebar
@@ -78,7 +78,7 @@ retailVision/
 
 Pages:
 - `OverviewPage` — the landing route (`/`); live occupancy grid plus a recent-activity feed. Fully wired to the server's `/occupancy/live` and `/detections` endpoints.
-- `DetectionsPage` (`/detections`) — the raw event log: filterable by camera node, zone and time range, paged client-side. One row is one detection event, not one person.
+- `DetectionsPage` (`/detections`, shown as **Visits**) — one row per person's stay, folded server-side from their track's records via `/visits`: arrival, duration, zone, dominant mood. Leads with what the visits say in aggregate (stay-duration histogram, mood mix, median/longest stay) before the list; the raw event stream stays API-only.
 - `ZonesPage` (`/zones`) — one zone at a time: deduplicated headcount, which cameras contribute it, and that zone's history from `/aggregates?zone_id=`.
 - `NotFoundPage` — catch-all 404 for unmatched routes.
 

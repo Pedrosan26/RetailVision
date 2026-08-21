@@ -89,7 +89,10 @@ class SummaryOut(BaseModel):
 
     unique_people counts distinct (camera node, track) pairs, so it is
     per-camera: someone visible to two cameras counts twice here, the same
-    honesty caveat the aggregates carry.
+    honesty caveat the aggregates carry. peak_occupancy is the largest
+    headcount any record carried -- the node-reported count at its moment
+    -- so it is deduplicated the way the node deduplicated it, not summed
+    across cameras.
     """
 
     since: datetime
@@ -100,6 +103,54 @@ class SummaryOut(BaseModel):
     emotion_distribution: dict[str, int]
     busiest_hour_start: datetime | None
     busiest_hour_people: int
+    peak_occupancy: int
+
+
+class VisitOut(BaseModel):
+    """One person's visit as seen by one camera: their track's records folded into a single row.
+
+    The unit the dashboard reasons about -- a person who stayed four
+    minutes is one visit, not two hundred events. duration_seconds spans
+    first to last record; emission is change-driven with a 10s heartbeat,
+    so it understates a stay by at most that heartbeat.
+    """
+
+    camera_node_id: str
+    track_id: str
+    first_seen: datetime
+    last_seen: datetime
+    duration_seconds: float
+    zone_id: str | None
+    age_group: str
+    gender: str
+    dominant_emotion: str
+    emotion_distribution: dict[str, int]
+    events: int
+
+
+class ZoneGeometryIn(BaseModel):
+    """One zone's floor polygon in world meters, as a ring of [x, y] pairs."""
+
+    zone_id: str
+    polygon: list[list[float]] = Field(min_length=3)
+
+
+class ZoneGeometryRequest(BaseModel):
+    """A camera node's zone geometry upload, sent once at startup."""
+
+    camera_node_id: str
+    zones: list[ZoneGeometryIn] = Field(min_length=1)
+
+
+class ZoneGeometryOut(BaseModel):
+    """A zone's stored floor polygon, for the dashboard's floor map."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    zone_id: str
+    camera_node_id: str
+    polygon: list[list[float]]
+    updated_at: datetime
 
 
 class AggregateBucket(BaseModel):

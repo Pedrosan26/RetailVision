@@ -46,7 +46,7 @@ retailVision/
       common/     LoadingState, ErrorState
     pages/
       OverviewPage.tsx     # "/" -- live occupancy + recent activity, fully wired
-      DetectionsPage.tsx    # "/detections" -- placeholder, full table lands in a later ticket
+      DetectionsPage.tsx    # "/detections" -- the Visits page, one row per person's stay
       ZonesPage.tsx           # "/zones" -- placeholder, needs zone config (EP-5) first
       NotFoundPage.tsx         # catch-all 404
     App.tsx              # QueryClientProvider + route table
@@ -211,7 +211,58 @@ Tailwind strings.
   figures sit beside the headcount rather than behind it, because a zone
   reading four looks equally healthy whether three cameras agree or two have
   silently stopped reporting.
-- **Detections** (`/detections`) -- the raw event log, filterable by camera,
-  zone and time range, paged client-side. One row is one detection event,
-  not one person; a table of rows otherwise invites being read as a list of
-  people.
+Page sections on the Overview and Zones pages are reorderable: hovering a
+section shows up/down controls at its top-right, and the chosen order
+persists per-browser alongside the alert settings -- how a page is
+arranged is a property of the person reading it, not of the deployment.
+Deliberately buttons rather than drag-and-drop: reordering is a
+set-and-forget act, not a frequent gesture, so it does not justify a drag
+library, and buttons work for keyboard users. Sections added by later
+versions append in their default position rather than invalidating a
+stored order. The KPI strip and page headers stay fixed: a headline that
+can wander stops being a headline.
+
+Four insight features sit on top of the pages:
+
+- **Floor map** (Zones page) -- the zone's surveyed polygon with an hour
+  of position heat and dots for people there right now. Heat is a grid of
+  cells whose opacity follows sighting density: a sequential encoding in
+  the single accent hue, since magnitude on a map is one measure, not
+  categories. Live dots are ink with a surface ring so they read against
+  any heat level. Geometry arrives via the server's `/zones/geometry`,
+  uploaded by nodes at startup; the empty state says to restart nodes
+  after upgrading. The map is explorable: wheel or buttons zoom (up to
+  8x, around the cursor), dragging pans while zoomed, and hovering a
+  cell or a person opens the same floating detail box the time charts
+  use -- a cell reports its world coordinate, sighting count and share,
+  dominant emotion and last-seen; a person reports their labels and how
+  recently they were seen. The scale bar stays two real meters long, so
+  zooming visibly stretches it. Positions inherit the head-height
+  assumption, and the section heading says so. The polygon is the convex
+  hull, so markers mounted on interior partitions are not corners --
+  fewer sides than markers is the dent fix working, not data loss.
+- **Rhythm of the day** (Visits page) -- average distinct people per
+  local hour, folded client-side from a week of hourly aggregates.
+  Columns, not the horizontal bars used elsewhere: hours are a cyclic
+  scale read like a clock face, not ranked categories. Only the peak
+  carries a direct label.
+- **Crowding alerts** -- a threshold (N people for M minutes) set on the
+  Overview page, persisted per-browser in localStorage: who wants to be
+  warned is a property of the person watching, not the deployment. The
+  banner renders in the shell so it survives navigation; the "held for M
+  minutes" clock runs client-side off the polls the pages already make.
+- **Week-over-week deltas** on the KPI tiles -- the same 24-hour window
+  one week earlier, which controls for day-of-week the way day-over-day
+  does not. Deltas render in neutral ink: more people is not inherently
+  good or bad, so status colour would editorialize. They appear only once
+  last week has data to compare against.
+
+- **Visits** (`/detections`) -- one row per person's stay, folded from their
+  track's records by the server's `/visits` endpoint: arrival, duration,
+  zone, dominant mood. The page leads with the aggregate story -- a
+  stay-duration histogram (buckets kept in scale order, not size order),
+  the mood mix with each visit counted once, median and longest stay --
+  and only then the list, filterable by camera, zone and time range and
+  paged client-side. The raw per-event stream is deliberately not shown:
+  since per-person emission landed it is machinery, and it remains
+  reachable through the API.

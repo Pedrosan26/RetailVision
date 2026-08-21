@@ -118,6 +118,26 @@ class TestRemoteLogShipper(unittest.TestCase):
             self.assertEqual(record["count"], 4)
             self.assertEqual(record["dwell_seconds"], 12.5)
 
+    def test_ship_zone_geometry_posts_to_the_zones_endpoint(self) -> None:
+        """Zone polygons go to /zones/geometry with the node's identity and key, once."""
+        with patch("src.retailvision.remote_log.requests.post") as mock_post:
+            mock_post.return_value = MagicMock(status_code=204)
+            shipper = self._make_shipper(camera_node_id="node-42")
+            zones = [{"zone_id": "entrance", "polygon": [[0.0, 0.0], [2.0, 0.0], [2.0, 2.0]]}]
+            shipper.ship_zone_geometry(zones)
+
+            self.assertEqual(mock_post.call_count, 1)
+            args, kwargs = mock_post.call_args
+            self.assertTrue(args[0].endswith("/api/v1/zones/geometry"))
+            self.assertEqual(kwargs["json"], {"camera_node_id": "node-42", "zones": zones})
+            self.assertEqual(kwargs["headers"]["X-API-Key"], "test-key")
+
+    def test_ship_zone_geometry_with_no_zones_posts_nothing(self) -> None:
+        """A node with no ready zones does not send an empty upload the server would reject."""
+        with patch("src.retailvision.remote_log.requests.post") as mock_post:
+            self._make_shipper().ship_zone_geometry([])
+            mock_post.assert_not_called()
+
     def test_send_failure_does_not_raise(self) -> None:
         """A network failure while shipping is caught and warned about, never propagated to the caller."""
         with patch("src.retailvision.remote_log.requests.post") as mock_post:
