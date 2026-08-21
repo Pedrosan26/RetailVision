@@ -222,11 +222,11 @@ data/
 *.pt
 *.onnx
 
-# Printable ArUco markers (regenerate via scripts/generate_aruco_markers.py)
+# Printable ArUco markers (regenerate via scripts/setup/generate_aruco_markers.py)
 markers/
 
 # Per-camera intrinsic calibration -- describes one physical camera, so it is
-# specific to the machine it was captured on (regenerate via scripts/calibrate_camera.py)
+# specific to the machine it was captured on (regenerate via scripts/setup/calibrate_camera.py)
 calibration/
 
 # Live zone definitions; config/zones.example.json is the committed template
@@ -234,7 +234,7 @@ config/zones.json
 
 # Surveyed marker map -- describes where the markers physically are in one
 # room, so it is specific to that deployment (regenerate via
-# scripts/aruco_pose_test.py --save-map)
+# scripts/setup/aruco_pose_test.py --save-map)
 config/marker_map.json
 
 # Working notes and agent instructions: useful locally, deliberately not

@@ -108,7 +108,7 @@ def parse_args() -> argparse.Namespace:
         "--marker-map",
         type=Path,
         default=None,
-        help="Surveyed marker map from 'aruco_pose_test.py --save-map'. Required with --zones on a multi-camera setup, "
+        help="Surveyed marker map from 'scripts/setup/aruco_pose_test.py --save-map'. Required with --zones on a multi-camera setup, "
              "since a node that builds its own map would not share a world frame with the others",
     )
     parser.add_argument("--calibration", default=None, help="This camera's calibration JSON, required with --zones")

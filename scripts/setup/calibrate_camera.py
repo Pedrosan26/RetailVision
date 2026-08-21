@@ -15,7 +15,7 @@ The result describes the camera itself, not the room, so it stays valid
 across every zone and deployment that camera is used in. Rerun only if the
 lens, resolution or zoom changes.
 
-Usage: PYTHONPATH=. ./venv/bin/python3 scripts/calibrate_camera.py --source 0 --out calibration/camera_0.json
+Usage: PYTHONPATH=. ./venv/bin/python3 scripts/setup/calibrate_camera.py --source 0 --out calibration/camera_0.json
 SPACE captures a view, 'c' calibrates and saves, 'q' quits.
 """
 

@@ -23,9 +23,9 @@ loop, which answers the heavier question of whether the machine can carry
 inference across that many cameras. Capture rates are still measured on
 the camera threads, so the two effects stay separable.
 
-Usage: PYTHONPATH=. ./venv/bin/python3 scripts/camera_check.py
-       PYTHONPATH=. ./venv/bin/python3 scripts/camera_check.py --source 0 1 2 3
-       PYTHONPATH=. ./venv/bin/python3 scripts/camera_check.py --detect
+Usage: PYTHONPATH=. ./venv/bin/python3 scripts/setup/camera_check.py
+       PYTHONPATH=. ./venv/bin/python3 scripts/setup/camera_check.py --source 0 1 2 3
+       PYTHONPATH=. ./venv/bin/python3 scripts/setup/camera_check.py --detect
 Press 'q' to quit.
 """
 

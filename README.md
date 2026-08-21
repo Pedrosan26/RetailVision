@@ -112,10 +112,10 @@ by every node.
 
 ```bash
 # 1. Calibrate each camera's intrinsics (once per physical camera)
-PYTHONPATH=. ./venv/bin/python3 scripts/calibrate_camera.py --source 0 --output calibration/camera_0.json
+PYTHONPATH=. ./venv/bin/python3 scripts/setup/calibrate_camera.py --source 0 --output calibration/camera_0.json
 
 # 2. Survey the markers into a shared world frame
-PYTHONPATH=. ./venv/bin/python3 scripts/aruco_pose_test.py \
+PYTHONPATH=. ./venv/bin/python3 scripts/setup/aruco_pose_test.py \
   --source 0 1 2 \
   --calibration calibration/camera_0.json calibration/camera_1.json calibration/camera_2.json \
   --marker-size 0.14 --anchor 3 --marker-mounting wall --marker-height 2.4 \
@@ -220,7 +220,9 @@ retailVision/src/      React dashboard
   components/, pages/    charts, occupancy, cameras, layout
   store/                 Zustand, UI state only
 
-scripts/               dataset prep, training, evaluation, camera calibration and survey tools
+scripts/               dataset prep, training and evaluation that produced the models
+  setup/                 calibration, marker generation, camera and marker survey --
+                         the tools you run to deploy a node
 ```
 
 ---
