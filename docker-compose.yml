@@ -1,3 +1,18 @@
+# docker-compose.yml
+#
+# Brings up the whole server stack -- database, API and dashboard -- with
+# `docker compose up`.
+#
+# Camera nodes are deliberately not services here. A node needs the
+# physical camera attached to the machine it runs on, so it belongs on
+# that hardware rather than in a container on this host (Docker Desktop
+# on macOS cannot pass a webcam through at all). Run nodes with
+# pipeline_demo.py and point --server-url at this stack; see README.md.
+#
+# Starting a single service still works and is the faster loop when
+# developing the server itself:
+#   docker compose up -d timescaledb    # database only, server on host
+
 services:
   timescaledb:
     image: timescale/timescaledb:latest-pg16
@@ -12,6 +27,52 @@ services:
       - "5433:5432"
     volumes:
       - timescale_data:/var/lib/postgresql/data
+    healthcheck:
+      # The server's first action is to run migrations, so it needs a
+      # database that actually accepts connections. Container startup
+      # alone does not mean that -- Postgres runs a bootstrap pass on an
+      # empty volume and rejects connections until it finishes.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  server:
+    build: ./server
+    environment:
+      # Inside the compose network the database is reachable at its
+      # service name on 5432 -- the 5433 mapping above is for host
+      # processes only. Credentials come from the same .env values the
+      # database was created with, so there is one source of truth.
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@timescaledb:5432/${POSTGRES_DB}
+      CAMERA_NODE_API_KEYS: ${CAMERA_NODE_API_KEYS}
+      # Both the containerized dashboard and a `npm run dev` server on
+      # the host, so either can talk to this API.
+      CORS_ORIGINS: http://localhost:8080,http://localhost:5173
+    ports:
+      - "8000:8000"
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    restart: unless-stopped
+
+  dashboard:
+    build:
+      context: ./retailVision
+      args:
+        # Baked into the bundle at build time. The browser runs on the
+        # host, so it reaches the API on the published port, not the
+        # compose service name.
+        VITE_API_BASE_URL: http://localhost:8000
+    ports:
+      - "8080:80"
+    depends_on:
+      # Ordering only, not a gate: if the API is unhealthy the dashboard
+      # should still come up and show its error states.
+      - server
+    restart: unless-stopped
 
 volumes:
   timescale_data:

@@ -57,32 +57,60 @@ rate from roughly 300 records per person per minute to about 6.
 
 ## Quick start
 
-Requires **Python 3.12**, **Node 22**, and Docker.
+The server stack -- database, API and dashboard -- runs in Docker:
 
 ```bash
-# 1. Camera node
-python3.12 -m venv venv && ./venv/bin/pip install -r requirements.txt
-
-# 2. Server + database
-cp .env.example .env && docker compose up -d timescaledb
-cd server && python3.12 -m venv venv && ./venv/bin/pip install -r requirements.txt
-cp .env.example .env && ./venv/bin/alembic upgrade head
-./venv/bin/uvicorn app.main:app --reload --port 8000      # docs at /docs
-
-# 3. Dashboard
-cd retailVision && nvm use && npm install
-cp .env.example .env && npm run dev                        # http://localhost:5173
+cp .env.example .env        # set database credentials and camera-node API keys
+docker compose up
 ```
 
-Then run a camera node:
+| | |
+|---|---|
+| Dashboard | http://localhost:8080 |
+| API docs | http://localhost:8000/docs |
+| Database | `localhost:5433` |
+
+The server container applies `alembic upgrade head` before it starts, so
+a fresh checkout builds its own schema and an existing one is left
+alone -- there is no separate migration step to forget.
+
+Camera nodes are **not** compose services. A node needs the camera
+attached to the machine it runs on, so it belongs on that hardware
+rather than in a container here. Run one against the stack:
 
 ```bash
+python3.12 -m venv venv && ./venv/bin/pip install -r requirements.txt
+
 PYTHONPATH=. ./venv/bin/python3 -m src.retailvision.pipeline_demo \
   --source 0 \
   --server-url http://localhost:8000 --camera-node-id cam-1 --api-key <key>
 ```
 
-`--source` takes a camera index or a video file path. Press `q` to quit.
+`--source` takes a camera index or a video file path. The `--api-key`
+must match an entry in `CAMERA_NODE_API_KEYS`. Press `q` to quit.
+
+<details>
+<summary><b>Running the server or dashboard on the host instead</b></summary>
+
+Faster loop when developing either one -- the database still comes from
+compose, and naming a single service starts only that service:
+
+```bash
+docker compose up -d timescaledb
+
+cd server && python3.12 -m venv venv && ./venv/bin/pip install -r requirements.txt
+cp .env.example .env && ./venv/bin/alembic upgrade head
+./venv/bin/uvicorn app.main:app --reload --port 8000
+
+cd retailVision && nvm use && npm install
+cp .env.example .env && npm run dev        # http://localhost:5173
+```
+
+`server/.env` points at `localhost:5433`; the compose file overrides
+`DATABASE_URL` to `timescaledb:5432` for the containerized server, since
+the published port only exists for host processes. The API allows both
+origins, so a host dev server can talk to the containerized API.
+</details>
 
 <details>
 <summary><b>Environment notes</b></summary>
@@ -95,6 +123,9 @@ PYTHONPATH=. ./venv/bin/python3 -m src.retailvision.pipeline_demo \
   "succeeds" and `npm run dev` then crashes on a missing binding.
 - **TimescaleDB is on host port 5433**, not 5432, to avoid clashing with
   a locally installed Postgres.
+- **The dashboard is on 8080 in Docker, 5173 under `npm run dev`** — two
+  ports so a container and a dev server can run side by side. The API
+  allows both origins.
 - `opencv-python` is pinned. A later release shipped a macOS build
   missing `cv2.CascadeClassifier` and its bundled cascade files.
   Production code no longer uses either, but the pin has not been
@@ -223,6 +254,10 @@ retailVision/src/      React dashboard
 scripts/               dataset prep, training and evaluation that produced the models
   setup/                 calibration, marker generation, camera and marker survey --
                          the tools you run to deploy a node
+
+docker-compose.yml     the server stack
+  server/Dockerfile      migrations then uvicorn; no torch, inference is on the nodes
+  retailVision/Dockerfile  Vite build served by nginx, with SPA-route fallback
 ```
 
 ---
