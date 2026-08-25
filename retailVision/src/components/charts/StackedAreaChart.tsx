@@ -68,6 +68,13 @@ export interface StackedAreaChartProps {
   unitLabel?: string;
   /** Extra rows to show in the tooltip for each bucket, indexed alongside `labels`. */
   details?: Array<Array<{ label: string; value: string }>>;
+  /**
+   * Canonical ordering of every category this chart can ever show, which
+   * fixes each one's colour. Without it a series is coloured by its index
+   * among the series actually present, so a range missing one category
+   * shifts the colours of all the ones after it.
+   */
+  categoryOrder?: readonly string[];
 }
 
 /** Renders stacked areas over time, with hover focused on whichever band the cursor is inside. */
@@ -78,6 +85,7 @@ export function StackedAreaChart({
   bucketHours,
   unitLabel = "detections",
   details,
+  categoryOrder,
 }: StackedAreaChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<Hover | null>(null);
@@ -110,7 +118,8 @@ export function StackedAreaChart({
     const lower = running.map((value, i) => [x(i), y(value)] as [number, number]);
     running = running.map((value, i) => value + (s.values[i] ?? 0));
     const upper = running.map((value, i) => [x(i), y(value)] as [number, number]);
-    return { name: s.name, colour: seriesColor(seriesIndex), upper, lower };
+    const slot = categoryOrder ? categoryOrder.indexOf(s.name) : seriesIndex;
+    return { name: s.name, colour: seriesColor(slot === -1 ? seriesIndex : slot), upper, lower };
   });
 
   const tickValues = ticks(yMax);
