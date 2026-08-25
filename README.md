@@ -194,6 +194,9 @@ cannot fold a dent into the perimeter.
 - **Visits** — one row per person's stay rather than per detection
   event: arrival, duration, zone, dominant mood, plus stay-duration
   distribution and hour-of-day rhythm
+- **Cameras** — one node's annotated frame at a time, full width, over a
+  WebSocket. Only shows nodes started with `--stream-frames`; see
+  [Privacy design](#privacy-design)
 
 Page sections are reorderable and the arrangement persists per browser.
 
@@ -201,11 +204,12 @@ Page sections are reorderable and the arrangement persists per browser.
 
 ## Privacy design
 
-The constraint is that **no pixel-derived identifier ever leaves a camera
-node**, and the architecture is built around it rather than bolted on:
+The constraint is that **the analytics pipeline moves no pixels**. What
+leaves a camera node as data is labels, counts and coordinates — nothing
+from which a face could be reconstructed or matched:
 
-- Inference is local; only labels, counts and floor coordinates are
-  transmitted
+- Inference is local; the record stream carries only labels, counts and
+  floor coordinates
 - Log records carry no bounding boxes, crops, or face embeddings
 - `track_id` groups one person's records **within one camera and one
   process run**. It is random, survives no restart, and is not comparable
@@ -217,6 +221,15 @@ node**, and the architecture is built around it rather than bolted on:
 Re-identification across visits is deliberately not implemented. It
 would make several metrics better and is the one capability this
 architecture rules out on purpose.
+
+**Live view is the exception, and it is deliberately a separate channel.**
+`--stream-frames` opens a WebSocket that sends the annotated preview to
+the server so an operator can see what a camera is actually pointed at.
+It is off unless asked for, the frames are held in the server's memory
+and never written to disk or the database, and they are not part of the
+record stream above — the analytics data is identical whether streaming
+is on or off. A deployment that does not need to check camera aim should
+leave it off, and nothing else stops working.
 
 ---
 
@@ -235,10 +248,12 @@ src/retailvision/      camera node pipeline
   counter.py             virtual-line crossing counter
   output_log.py          anonymized local record sink
   remote_log.py          batched shipping to the server
+  frame_stream.py        opt-in live preview over a WebSocket
   pipeline_demo.py       wires it together
 
 server/app/            FastAPI service
-  routers/               ingest, detections, occupancy, aggregates, summary, visits, zone geometry
+  routers/               ingest, detections, occupancy, aggregates, summary, visits,
+                         zone geometry, frames (live preview WebSockets)
   models/, schemas/      SQLAlchemy ORM and Pydantic models
   dedup.py               cross-camera spatial deduplication
 migrations/            Alembic
