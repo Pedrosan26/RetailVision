@@ -186,8 +186,8 @@ cannot fold a dent into the perimeter.
 ## What the dashboard shows
 
 - **Overview** — live per-zone occupancy (deduplicated across cameras),
-  KPI strip with week-over-week deltas, live camera feeds, configurable
-  crowding alerts
+  KPI strip with week-over-week deltas, per-node reporting status,
+  configurable crowding alerts
 - **Zones** — per-zone headcount with per-camera contributions, a
   top-down **floor heatmap** (surveyed polygon, position density, live
   person dots, zoom/pan/hover), and historical charts
@@ -213,9 +213,6 @@ node**, and the architecture is built around it rather than bolted on:
   them
 - Recognising the same person across cameras is solved **spatially**,
   from world position, never by appearance matching
-- Live frame streaming to the dashboard exists but is **opt-in** behind
-  `--stream-frames`, and is documented as a deliberate trade-off against
-  this design
 
 Re-identification across visits is deliberately not implemented. It
 would make several metrics better and is the one capability this
@@ -241,7 +238,7 @@ src/retailvision/      camera node pipeline
   pipeline_demo.py       wires it together
 
 server/app/            FastAPI service
-  routers/               ingest, detections, occupancy, aggregates, summary, visits, frames, zone geometry
+  routers/               ingest, detections, occupancy, aggregates, summary, visits, zone geometry
   models/, schemas/      SQLAlchemy ORM and Pydantic models
   dedup.py               cross-camera spatial deduplication
 migrations/            Alembic

@@ -7,7 +7,6 @@
 // Zones page, where it can be scoped to one area; repeating it here would
 // make the live view slower to read.
 
-import { CameraFeedGrid } from "../components/cameras/CameraFeedGrid";
 import { AlertSettings } from "../components/common/AlertBanner";
 import { ArrangeableSections } from "../components/common/ArrangeableSections";
 import { RecentActivityFeed } from "../components/detections/RecentActivityFeed";
@@ -42,7 +41,7 @@ function CameraStatusRow() {
   );
 }
 
-/** Renders the Overview page: headline figures, live occupancy, camera feeds, and recent activity. */
+/** Renders the Overview page: headline figures, live occupancy, camera node status, and recent activity. */
 export function OverviewPage() {
   return (
     <div className="flex flex-col gap-8">
@@ -71,13 +70,10 @@ export function OverviewPage() {
             id: "cameras",
             children: (
               <>
-                <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2 pr-16">
-                  <SectionHeading hint="Frames leave a camera node only while it runs with --stream-frames.">
-                    Camera feeds
-                  </SectionHeading>
-                  <CameraStatusRow />
-                </div>
-                <CameraFeedGrid />
+                <SectionHeading hint="A node goes stale when it stops reporting, whether it crashed or lost its view.">
+                  Camera nodes
+                </SectionHeading>
+                <CameraStatusRow />
               </>
             ),
           },
