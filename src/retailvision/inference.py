@@ -52,8 +52,15 @@ def resolve_device() -> str:
 class InferencePipeline:
     """Detects faces and classifies age group, gender, and emotion per frame."""
 
-    def __init__(self, device: str | None = None) -> None:
-        """Load the face detector and all three fine-tuned classifiers once."""
+    def __init__(self, device: str | None = None, track: bool = False) -> None:
+        """Load the face detector and all three fine-tuned classifiers once.
+
+        With track=True the detector associates faces across frames itself
+        (ByteTrack) and every detection carries a track_id. With track=False
+        it detects each frame independently and track_id is always None,
+        leaving identity to whatever the caller wires up.
+        """
+        self.track = track
         self.device = device or resolve_device()
         self.detector = FaceDetector(device=self.device)
         self.models: dict[str, YOLO] = {task: YOLO(str(path)) for task, path in WEIGHTS.items()}
@@ -78,9 +85,16 @@ class InferencePipeline:
         return "negative", round(negative_prob, 4)
 
     def process_frame(self, frame: np.ndarray) -> list[dict]:
-        """Detect faces in a BGR frame and classify age group, gender, and emotion for each."""
+        """Detect faces in a BGR frame and classify age group, gender, and emotion for each.
+
+        Each detection carries a track_id when this pipeline was built with
+        track=True, and None otherwise. A track_id of None while tracking is
+        on means ByteTrack has seen the face but not yet confirmed it as a
+        track.
+        """
         detections = []
-        for x, y, w, h in self.detector.detect(frame):
+        found = self.detector.track(frame) if self.track else [(box, None) for box in self.detector.detect(frame)]
+        for (x, y, w, h), track_id in found:
             crop = frame[y : y + h, x : x + w]
             if crop.size == 0:
                 continue
@@ -92,6 +106,7 @@ class InferencePipeline:
             detections.append(
                 {
                     "bbox": (x, y, w, h),
+                    "track_id": track_id,
                     "age_group": age_group,
                     "gender": gender,
                     "emotion": emotion,

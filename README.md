@@ -237,9 +237,9 @@ leave it off, and nothing else stops working.
 
 ```
 src/retailvision/      camera node pipeline
-  detection.py           YOLOv8 face detector
+  detection.py           YOLOv8 face detector, with ByteTrack association (default)
   inference.py           detector + age/gender/emotion classifiers, one call per frame
-  tracking.py            centroid tracker, Hungarian matching
+  tracking.py            centroid tracker, Hungarian matching (--tracker centroid)
   person_track.py        per-person identity voting and change-based emission
   calibration.py         intrinsics, with a self-consistency check
   marker_pose.py         per-marker 3D pose from solvePnP
@@ -289,6 +289,32 @@ applying the migrations for real.
 ---
 
 ## Engineering notes
+
+**Two trackers, and why both are still here.** Faces are followed between
+frames by ByteTrack (`--tracker bytetrack`, the default), which runs
+inside the detector where the per-detection confidence scores still
+exist. Its two-stage association matches confident detections first, then
+tries the low-confidence leftovers against tracks still unmatched instead
+of discarding them — a face that turns or blurs loses confidence well
+before it disappears, and that second pass is what keeps it on one track.
+
+The original centroid tracker (`--tracker centroid`) is kept as the
+baseline, which is what makes the claim checkable. Measured over the
+recorded evaluation clips, same frames through both:
+
+| clip | centroid | ByteTrack |
+|---|---|---|
+| `side_view` | 3 tracks | **2 tracks** |
+| `looking_down` | 2 tracks | 2 tracks |
+| `close_1m` | 1 track | 1 track |
+
+Fewer tracks over identical detections means fewer identity breaks. The
+gain shows up only on the turned-face clip, which is the case the second
+stage exists for, and it costs nothing measurable in frame rate. That is
+a modest result honestly obtained, not a transformation — and worth
+having, because a track that breaks in two reports one visitor as two,
+restarts their dwell timer, and splits their age/gender vote.
+
 
 A few problems whose solutions shaped the system:
 

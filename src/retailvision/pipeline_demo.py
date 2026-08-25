@@ -127,6 +127,13 @@ def parse_args() -> argparse.Namespace:
         help=f"Plane height in meters that detections back-project onto (default: {DEFAULT_HEAD_HEIGHT_METERS})",
     )
     parser.add_argument(
+        "--tracker",
+        choices=("bytetrack", "centroid"),
+        default="bytetrack",
+        help="How faces are followed between frames: 'bytetrack' uses the detector's own "
+        "confidence-aware tracker, 'centroid' the simpler nearest-centroid matcher (default: bytetrack)",
+    )
+    parser.add_argument(
         "--stream-frames",
         action="store_true",
         help="Also stream the annotated frame to the server for live viewing in the dashboard. "
@@ -275,8 +282,12 @@ def main() -> None:
     if line_position is None:
         line_position = width / 2 if args.line_axis == "x" else height / 2
 
-    pipeline = InferencePipeline()
-    # The tracker's match radius is how far a person may move between frames
+    use_bytetrack = args.tracker == "bytetrack"
+    pipeline = InferencePipeline(track=use_bytetrack)
+    # Only built for --tracker centroid; ByteTrack assigns ids inside the
+    # detector, where it can use the confidence scores this one never sees.
+    #
+    # The centroid tracker's match radius is how far a person may move between frames
     # and still be the same track. It is measured in pixels, so a fixed number
     # only means something at one resolution -- the same physical motion covers
     # three times as many pixels at 1920 wide as at 640. Expressed as a
@@ -284,7 +295,7 @@ def main() -> None:
     # half a metre of lateral motion at a few metres' range, generous enough
     # for slow movement at low frame rates while staying under typical
     # person-to-person spacing so two neighbours don't swap IDs.
-    tracker = CentroidTracker(max_distance=width * 0.15)
+    tracker = None if use_bytetrack else CentroidTracker(max_distance=width * 0.15)
     registry = TrackRegistry()
     counter = LineCounter(axis=args.line_axis, position=line_position, entry_direction=args.line_direction)
     shipper = None
@@ -350,8 +361,19 @@ def main() -> None:
             detections = pipeline.process_frame(frame)
             total_faces += len(detections)
 
-            bboxes = [det["bbox"] for det in detections]
-            track_ids = tracker.update(bboxes)
+            if tracker is None:
+                # ByteTrack reports a null id for a face it has seen but not yet
+                # confirmed as a track. Those are dropped rather than counted:
+                # everything downstream -- occupancy, dwell, the identity vote --
+                # is about people, and a detection the tracker will not vouch for
+                # is not yet a person.
+                confirmed = [det for det in detections if det["track_id"] is not None]
+                bboxes = [det["bbox"] for det in confirmed]
+                track_ids = [det["track_id"] for det in confirmed]
+                detections = confirmed
+            else:
+                bboxes = [det["bbox"] for det in detections]
+                track_ids = tracker.update(bboxes)
             timestamp = time.time()
             tracks = {track_id: bbox_centroid(bbox) for track_id, bbox in zip(track_ids, bboxes)}
             for track_id, event in counter.update(tracks, timestamp):
