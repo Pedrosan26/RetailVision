@@ -134,6 +134,13 @@ def parse_args() -> argparse.Namespace:
         "confidence-aware tracker, 'centroid' the simpler nearest-centroid matcher (default: bytetrack)",
     )
     parser.add_argument(
+        "--bodies",
+        action="store_true",
+        help="Detect whole people alongside faces and identify by the body rather than the face. "
+        "A body stays visible when a face turns away, so one person is one track instead of one per "
+        "head turn, and their feet give a floor position that needs no assumed head height.",
+    )
+    parser.add_argument(
         "--stream-frames",
         action="store_true",
         help="Also stream the annotated frame to the server for live viewing in the dashboard. "
@@ -283,7 +290,9 @@ def main() -> None:
         line_position = width / 2 if args.line_axis == "x" else height / 2
 
     use_bytetrack = args.tracker == "bytetrack"
-    pipeline = InferencePipeline(track=use_bytetrack)
+    pipeline = InferencePipeline(track=use_bytetrack, bodies=args.bodies)
+    if args.bodies:
+        print("Body detection enabled: identity follows the person, positions come from their feet.")
     # Only built for --tracker centroid; ByteTrack assigns ids inside the
     # detector, where it can use the confidence scores this one never sees.
     #
@@ -396,11 +405,25 @@ def main() -> None:
             world_positions: list[tuple[float, float] | None] = [None] * len(detections)
             if resolver is not None:
                 resolver.update(frame)
-                world_positions = [resolver.world_position(bbox) for bbox in bboxes]
-                # Membership tests the ray across the whole plausible band of
-                # face heights, so seated and standing people both land in the
-                # zone; the coordinate above stays committed to one plane.
-                zone_ids = [resolver.zone_for_bbox(bbox) for bbox in bboxes]
+                # Feet first where a body detection saw them. That ray meets the
+                # floor at a point with no assumed height in it, which is the
+                # single largest source of position error otherwise. Where the
+                # feet were cropped by the frame edge -- someone close to the
+                # camera -- there is nothing to project, so the face path takes
+                # over: less accurate, but a position rather than a gap.
+                floor_pixels = [det.get("floor_pixel") for det in detections]
+                world_positions = [
+                    resolver.floor_world_position(pixel) if pixel is not None else resolver.world_position(bbox)
+                    for pixel, bbox in zip(floor_pixels, bboxes)
+                ]
+                # Membership from the floor contact is a single point test. The
+                # face fallback instead samples the ray across the whole
+                # plausible band of face heights, so seated and standing people
+                # both land in the zone.
+                zone_ids = [
+                    resolver.zone_for_floor(pixel) if pixel is not None else resolver.zone_for_bbox(bbox)
+                    for pixel, bbox in zip(floor_pixels, bboxes)
+                ]
                 # Occupancy counts confirmed people, so a one-frame false
                 # positive never appears in a headcount it would inflate.
                 zone_counts = resolver.occupancy(

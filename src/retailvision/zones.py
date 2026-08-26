@@ -193,6 +193,39 @@ class ZoneResolver:
             plane_z=self.head_height,
         )
 
+    def floor_world_position(self, pixel: tuple[float, float]) -> tuple[float, float] | None:
+        """Return the world position of a pixel known to be where someone meets the floor.
+
+        This is the accurate path, and it exists because a body detection
+        supplies something a face never could: a point that is on the floor
+        by definition. The ray through it is intersected with z = 0, so
+        there is no assumed height to be wrong about -- unlike
+        world_position() below, whose error grows with the difference
+        between a person's real head height and the configured one.
+
+        Callers get None when the camera is not localized, and are expected
+        to have already established that the feet are actually visible; see
+        person_detection.floor_pixel(), which returns None when they are not.
+        """
+        if self.camera_pose is None:
+            return None
+        return project_to_plane(
+            pixel,
+            self.camera_pose,
+            self.localizer.estimator.calibration,
+            plane_z=0.0,
+        )
+
+    def zone_for_floor(self, pixel: tuple[float, float]) -> str | None:
+        """Return the zone containing a floor-contact pixel, or None if outside them all.
+
+        No height band is sampled here. The face path has to try a range of
+        plausible head heights because it cannot tell a seated person from a
+        standing one; a floor contact is the same point either way.
+        """
+        position = self.floor_world_position(pixel)
+        return None if position is None else self.zone_map.zone_for(position)
+
     def zone_for_bbox(self, bbox: tuple[int, int, int, int]) -> str | None:
         """Return the zone whose vertical prism the detection's viewing ray crosses at a plausible face height.
 
