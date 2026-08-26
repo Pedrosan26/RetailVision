@@ -31,11 +31,28 @@ class DetectionRecord(BaseModel):
     engagement_score: float | None = None
 
 
+class AppearanceIn(BaseModel):
+    """One track's appearance vector, as the node currently describes it."""
+
+    track_id: str
+    # Length is not pinned to one value: the encoder is swappable, and a node
+    # running a different size should be rejected by the clustering that reads
+    # these rather than by the wire format that carries them.
+    embedding: list[float] = Field(min_length=8, max_length=4096)
+
+
 class IngestRequest(BaseModel):
-    """A batch of records shipped from one camera node."""
+    """A batch of records shipped from one camera node.
+
+    Appearances ride along with the batch rather than on their own endpoint.
+    A track's description is a running mean that keeps changing, so what
+    matters is the current value at send time; repeating it on each batch is
+    idempotent and saves a second request path with its own failure modes.
+    """
 
     camera_node_id: str
     records: list[DetectionRecord] = Field(min_length=1, max_length=500)
+    appearances: list[AppearanceIn] = Field(default_factory=list, max_length=200)
 
 
 class IngestResponse(BaseModel):

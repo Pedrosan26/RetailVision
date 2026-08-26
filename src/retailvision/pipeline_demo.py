@@ -34,6 +34,7 @@ from pathlib import Path
 import cv2
 
 from .counter import LineCounter
+from .appearance import AppearanceEmbedder, TrackAppearance
 from .calibration import CameraCalibration
 from .frame_stream import FrameStreamer
 from .marker_map import DEFAULT_HEAD_HEIGHT_METERS, FLOOR_MOUNTING, WALL_MOUNTING, MarkerMap
@@ -141,6 +142,13 @@ def parse_args() -> argparse.Namespace:
         "head turn, and their feet give a floor position that needs no assumed head height.",
     )
     parser.add_argument(
+        "--reid",
+        action="store_true",
+        help="Describe each person's appearance so the server can recognise them across cameras. "
+        "Requires --bodies. Sends an appearance vector per track to the server, where it is stored "
+        "with an expiry -- the only data this system holds that is derived from how someone looks.",
+    )
+    parser.add_argument(
         "--stream-frames",
         action="store_true",
         help="Also stream the annotated frame to the server for live viewing in the dashboard. "
@@ -155,6 +163,10 @@ def parse_args() -> argparse.Namespace:
     args = parser.parse_args()
     if args.stream_frames and not args.server_url:
         parser.error("--stream-frames requires --server-url")
+    if args.reid and not args.bodies:
+        parser.error("--reid requires --bodies: appearance is described from the body crop")
+    if args.reid and not args.server_url:
+        parser.error("--reid requires --server-url: appearances are only useful to the server that merges them")
     if args.server_url and not (args.camera_node_id and args.api_key):
         parser.error("--server-url requires both --camera-node-id and --api-key")
     if args.zones and not args.calibration:
@@ -293,6 +305,11 @@ def main() -> None:
     pipeline = InferencePipeline(track=use_bytetrack, bodies=args.bodies)
     if args.bodies:
         print("Body detection enabled: identity follows the person, positions come from their feet.")
+
+    embedder = AppearanceEmbedder(device=pipeline.device) if args.reid else None
+    appearance = TrackAppearance() if args.reid else None
+    if args.reid:
+        print("Appearance descriptions enabled: shipped per track, stored server-side with an expiry.")
     # Only built for --tracker centroid; ByteTrack assigns ids inside the
     # detector, where it can use the confidence scores this one never sees.
     #
@@ -396,6 +413,31 @@ def main() -> None:
                 registry.observe(track_id, det, timestamp)
                 for track_id, det in zip(track_ids, detections)
             ]
+
+            # Describe how each person looks, so the server can recognise them
+            # on another camera when they were never visible to both at once --
+            # the case position alone provably cannot cover.
+            if appearance is not None:
+                described = [
+                    (track_id, person, det["body_bbox"])
+                    for track_id, person, det in zip(track_ids, people, detections)
+                    if det.get("body_bbox") is not None
+                ]
+                if described:
+                    vectors = embedder.embed_boxes(frame, [box for _, _, box in described])
+                    for (track_id, _, _), vector in zip(described, vectors):
+                        appearance.observe(track_id, vector)
+                appearance.retire(set(track_ids))
+                # Keyed by the anonymous per-track id the records carry, not by
+                # the tracker's own integer, which means nothing to the server.
+                if shipper is not None:
+                    shipper.set_appearances(
+                        {
+                            person.track_id: appearance.embedding(track_id).tolist()
+                            for track_id, person, _ in described
+                            if appearance.embedding(track_id) is not None
+                        }
+                    )
 
             # With zones configured, each detection carries the zone it is standing
             # in and that zone's live headcount, rather than the line counter's

@@ -10,7 +10,7 @@ double-counting the whole exercise exists to remove.
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from app.dedup import TrackKey, TrackPath, cluster_tracks, paired_distances, same_person
+from app.dedup import TrackKey, TrackPath, cluster_tracks, looks_like, paired_distances, same_person
 
 START = datetime(2026, 8, 26, 12, 0, 0, tzinfo=timezone.utc)
 
@@ -124,6 +124,60 @@ class ClusterTests(unittest.TestCase):
         """An empty range produces no people rather than an error."""
         self.assertEqual(cluster_tracks([]), {})
 
+
+
+class AppearanceClusterTests(unittest.TestCase):
+    """Appearance is consulted only where geometry cannot speak, and never overrules it."""
+
+    SAME = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    ALSO_SAME = [0.98, 0.2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    DIFFERENT = [0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+    def test_tracks_that_never_overlap_merge_when_they_look_alike(self):
+        """Someone leaving one camera and entering another is linked by appearance.
+
+        This is the case position provably cannot reach, and the only
+        reason appearance is collected at all.
+        """
+        early, late = walk("cam-a", "1", 0, 10, 2.0, 3.0), walk("cam-b", "7", 600, 10, 9.0, 9.0)
+        clusters = cluster_tracks(
+            [early, late],
+            appearances={early.key: self.SAME, late.key: self.ALSO_SAME},
+        )
+        self.assertEqual(len(set(clusters.values())), 1)
+
+    def test_tracks_that_never_overlap_stay_apart_when_they_look_different(self):
+        """Two people passing through in turn are still two people."""
+        early, late = walk("cam-a", "1", 0, 10, 2.0, 3.0), walk("cam-b", "7", 600, 10, 2.0, 3.0)
+        clusters = cluster_tracks(
+            [early, late],
+            appearances={early.key: self.SAME, late.key: self.DIFFERENT},
+        )
+        self.assertEqual(len(set(clusters.values())), 2)
+
+    def test_appearance_cannot_override_a_position_disagreement(self):
+        """Two people in similar clothing, standing apart while both cameras watch, stay two.
+
+        The guard that matters most: letting appearance win here would
+        merge distinct people and corrupt every count built on this.
+        """
+        left, right = walk("cam-a", "1", 0, 10, 0.0, 0.0), walk("cam-b", "7", 0, 10, 8.0, 8.0)
+        clusters = cluster_tracks(
+            [left, right],
+            appearances={left.key: self.SAME, right.key: self.ALSO_SAME},
+        )
+        self.assertEqual(len(set(clusters.values())), 2)
+
+    def test_appearance_never_merges_tracks_from_one_camera(self):
+        """One camera reporting two tracks is reporting two people, however alike they look."""
+        a, b = walk("cam-a", "1", 0, 10, 0.0, 0.0), walk("cam-a", "2", 600, 10, 0.0, 0.0)
+        clusters = cluster_tracks([a, b], appearances={a.key: self.SAME, b.key: self.ALSO_SAME})
+        self.assertEqual(len(set(clusters.values())), 2)
+
+    def test_missing_appearances_fall_back_to_geometry_alone(self):
+        """A node not sending appearances still gets position-based merging, and no crash."""
+        left, right = walk("cam-a", "1", 0, 10, 2.0, 3.0), walk("cam-b", "7", 0, 10, 2.1, 3.1)
+        self.assertEqual(len(set(cluster_tracks([left, right], appearances={}).values())), 1)
 
 if __name__ == "__main__":
     unittest.main()

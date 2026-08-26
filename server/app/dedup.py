@@ -65,6 +65,13 @@ DEFAULT_PAIRING_TOLERANCE = timedelta(milliseconds=500)
 # How many paired samples a comparison needs before its median means anything.
 MIN_PAIRED_SAMPLES = 4
 
+# Cosine similarity above which two tracks with no shared moment are treated
+# as the same person. A starting value, not a tuned one: setting it properly
+# needs footage containing several different people, and the separation that
+# matters -- between two people rather than two views of one -- has not been
+# measured yet. See src/retailvision/appearance.py for what has.
+DEFAULT_APPEARANCE_THRESHOLD = 0.6
+
 
 @dataclass(frozen=True)
 class Observation:
@@ -235,13 +242,55 @@ def same_person(
     return _median(distances) <= merge_radius
 
 
+def looks_like(
+    left: TrackKey,
+    right: TrackKey,
+    appearances: dict[TrackKey, Sequence[float]],
+    threshold: float = DEFAULT_APPEARANCE_THRESHOLD,
+) -> bool:
+    """Whether two tracks describe people who look the same, by cosine similarity.
+
+    Only consulted where geometry has nothing to say -- two tracks that
+    never overlapped in time. Where they did overlap, position is the
+    better evidence by a wide margin: it cannot confuse two people in
+    similar coats, and it does not care which way anyone was facing.
+    """
+    a, b = appearances.get(left), appearances.get(right)
+    if a is None or b is None or len(a) != len(b):
+        return False
+    dot = sum(x * y for x, y in zip(a, b))
+    norms = math.sqrt(sum(x * x for x in a)) * math.sqrt(sum(y * y for y in b))
+    return norms > 0 and dot / norms >= threshold
+
+
+def _overlaps(left: TrackPath, right: TrackPath, min_overlap: timedelta) -> bool:
+    """Whether two tracks were both visible for long enough to compare positions at all."""
+    left_start, left_end = left.span
+    right_start, right_end = right.span
+    return (min(left_end, right_end) - max(left_start, right_start)) >= min_overlap
+
+
 def cluster_tracks(
     paths: Sequence[TrackPath],
     merge_radius: float = DEFAULT_MERGE_RADIUS_METERS,
     min_overlap: timedelta = DEFAULT_MIN_OVERLAP,
     tolerance: timedelta = DEFAULT_PAIRING_TOLERANCE,
+    appearances: dict[TrackKey, Sequence[float]] | None = None,
+    appearance_threshold: float = DEFAULT_APPEARANCE_THRESHOLD,
 ) -> dict[TrackKey, str]:
     """Group tracks into people, returning the person id each track belongs to.
+
+    Two kinds of evidence, used where each is the stronger one. Position
+    settles any pair that was visible to both cameras at once: it is
+    unambiguous, and two people cannot occupy one spot. Appearance is
+    consulted only for pairs with no shared moment -- someone leaving one
+    camera and entering another -- which position provably cannot reach,
+    and which is the whole reason appearance is collected.
+
+    Never both, and in that order. Letting appearance override a position
+    disagreement would merge two people in similar clothing standing
+    apart, which is the failure that would quietly corrupt every count
+    built on top of this.
 
     Union-find over the pairwise test, so linking is transitive: three
     cameras watching one person produce three tracks that all reach the
@@ -271,7 +320,14 @@ def cluster_tracks(
 
     for index, left in enumerate(paths):
         for right in paths[index + 1 :]:
-            if same_person(left, right, merge_radius, min_overlap, tolerance):
+            if left.key.camera_node_id == right.key.camera_node_id:
+                continue
+            if _overlaps(left, right, min_overlap):
+                # Seen together: position decides, either way. A disagreement
+                # here is two people, and appearance does not get a vote.
+                if same_person(left, right, merge_radius, min_overlap, tolerance):
+                    union(left.key, right.key)
+            elif appearances and looks_like(left.key, right.key, appearances, appearance_threshold):
                 union(left.key, right.key)
 
     return {path.key: f"{find(path.key).camera_node_id}:{find(path.key).track_id}" for path in paths}
@@ -281,6 +337,7 @@ def person_ids_for_events(
     events: Iterable,
     merge_radius: float = DEFAULT_MERGE_RADIUS_METERS,
     min_overlap: timedelta = DEFAULT_MIN_OVERLAP,
+    appearances: dict[tuple[str, str], Sequence[float]] | None = None,
 ) -> dict[tuple[str, str], str]:
     """Map each (camera_node_id, track_id) in these events to the person it belongs to.
 
@@ -309,7 +366,12 @@ def person_ids_for_events(
         TrackPath(TrackKey(camera_node_id, track_id), points)
         for (camera_node_id, track_id), points in by_track.items()
     ]
-    clustered = cluster_tracks(paths, merge_radius, min_overlap)
+    by_key = (
+        {TrackKey(camera, track): vector for (camera, track), vector in appearances.items()}
+        if appearances
+        else None
+    )
+    clustered = cluster_tracks(paths, merge_radius, min_overlap, appearances=by_key)
 
     resolved = {(key.camera_node_id, key.track_id): person for key, person in clustered.items()}
     for camera_node_id, track_id in unpositioned:

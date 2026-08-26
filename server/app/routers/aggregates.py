@@ -22,11 +22,28 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
 from ..dedup import person_ids_for_events
+from ..models.appearance import TrackAppearance
 from ..models.detection import DetectionEvent
 from ..schemas.detection import AggregateBucket
 from ..utils import as_utc
 
 router = APIRouter(prefix="/api/v1", tags=["aggregates"])
+
+
+async def load_appearances(db, events) -> dict[tuple[str, str], list[float]]:
+    """Fetch the stored appearance for every track appearing in these events."""
+    keys = {(e.camera_node_id, e.track_id) for e in events if e.track_id is not None}
+    if not keys:
+        return {}
+    nodes = {camera for camera, _ in keys}
+    rows = (
+        await db.execute(select(TrackAppearance).where(TrackAppearance.camera_node_id.in_(nodes)))
+    ).scalars().all()
+    return {
+        (row.camera_node_id, row.track_id): row.embedding
+        for row in rows
+        if (row.camera_node_id, row.track_id) in keys
+    }
 
 DEFAULT_LOOKBACK = timedelta(hours=24)
 WINDOW_UNITS = {"m": "minutes", "h": "hours", "d": "days"}
@@ -44,7 +61,12 @@ def parse_window(window: str) -> timedelta:
     return timedelta(**{WINDOW_UNITS[unit]: value})
 
 
-def bucket_events(events: list[DetectionEvent], since: datetime, window: timedelta) -> list[AggregateBucket]:
+def bucket_events(
+    events: list[DetectionEvent],
+    since: datetime,
+    window: timedelta,
+    appearances: dict[tuple[str, str], list[float]] | None = None,
+) -> list[AggregateBucket]:
     """Group events into fixed-size time buckets aligned to `since`, aggregating each bucket."""
     buckets: dict[int, list[DetectionEvent]] = {}
     for event in events:
@@ -53,7 +75,7 @@ def bucket_events(events: list[DetectionEvent], since: datetime, window: timedel
 
     result = []
     # One clustering pass over every event in range, shared by all buckets.
-    person_ids = person_ids_for_events(events)
+    person_ids = person_ids_for_events(events, appearances=appearances)
 
     for index in sorted(buckets):
         bucket = buckets[index]
@@ -126,4 +148,4 @@ async def get_aggregates(
 
     result = await db.execute(stmt)
     events = result.scalars().all()
-    return bucket_events(events, range_since, window_delta)
+    return bucket_events(events, range_since, window_delta, await load_appearances(db, events))

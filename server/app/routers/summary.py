@@ -22,11 +22,33 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
 from ..dedup import person_ids_for_events
+from ..models.appearance import TrackAppearance
 from ..models.detection import DetectionEvent
 from ..schemas.detection import SummaryOut
 from ..utils import as_utc
 
 router = APIRouter(prefix="/api/v1", tags=["summary"])
+
+
+async def load_appearances(db, events) -> dict[tuple[str, str], list[float]]:
+    """Fetch the stored appearance for every track appearing in these events.
+
+    Scoped to the tracks actually in the range rather than loading the
+    whole table: a query over an hour touches a handful of tracks, and the
+    table holds a retention window's worth.
+    """
+    keys = {(e.camera_node_id, e.track_id) for e in events if e.track_id is not None}
+    if not keys:
+        return {}
+    nodes = {camera for camera, _ in keys}
+    rows = (
+        await db.execute(select(TrackAppearance).where(TrackAppearance.camera_node_id.in_(nodes)))
+    ).scalars().all()
+    return {
+        (row.camera_node_id, row.track_id): row.embedding
+        for row in rows
+        if (row.camera_node_id, row.track_id) in keys
+    }
 
 DEFAULT_LOOKBACK = timedelta(hours=24)
 HOUR = timedelta(hours=1)
@@ -71,7 +93,7 @@ async def get_summary(
     # Busiest hour: distinct people per hour-aligned bucket, peak wins. A person
     # spanning two hours counts in both, which is what "how busy was that hour"
     # means -- they were there during it.
-    people = person_ids_for_events(events)
+    people = person_ids_for_events(events, appearances=await load_appearances(db, events))
 
     per_hour: dict[int, set[str]] = {}
     for event in events:
