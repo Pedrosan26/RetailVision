@@ -1,0 +1,145 @@
+# Runs the three test suites and proves the stack still builds.
+#
+# Split into separate jobs rather than one, so a failure names which part
+# broke without reading a log, and so the fast checks are not queued behind
+# the slow dependency install.
+
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+# A new push makes the run in progress irrelevant; cancelling it keeps the
+# queue short and the feedback quick.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  camera-node:
+    name: Camera node tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      # opencv-python links against these; a headless runner has neither, and
+      # the failure is an unhelpful ImportError on libGL at first import.
+      - name: Install OpenCV system libraries
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libgl1 libglib2.0-0
+
+      # torch comes from the CPU-only index first, on its own. The default
+      # Linux wheel on PyPI bundles CUDA libraries measured in gigabytes and
+      # no runner here has a GPU to use them with. It has to be a separate
+      # install with --index-url rather than --extra-index-url on the main
+      # one: an extra index is additive, both carry the same version numbers,
+      # and which wheel pip then picks is not something to leave to chance.
+      - name: Install CPU-only PyTorch
+        run: pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision
+
+      # Finds torch already satisfied and installs the rest from PyPI.
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        run: PYTHONPATH=. python -m unittest discover -s tests -v
+
+  server:
+    name: Server tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: server/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # Runs against in-memory SQLite, so no database service is needed here.
+      # TimescaleDB-specific DDL is exercised by the migration in the stack job.
+      - name: Run tests
+        run: pytest -q
+
+  dashboard:
+    name: Dashboard lint, types and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: retailVision
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: retailVision/.nvmrc
+          cache: npm
+          cache-dependency-path: retailVision/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      # Typecheck separately from the build so a type error is reported as
+      # one, rather than as a build failure. The root tsconfig is a project
+      # references file, so `tsc -b` is the command that actually checks
+      # anything -- a bare `tsc --noEmit` here would pass while checking nothing.
+      - name: Typecheck
+        run: npx tsc -b
+
+      - name: Build
+        run: npm run build
+
+  stack:
+    name: Docker stack builds and migrates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The claim that `docker compose up` runs the whole system is worth
+      # testing, not just documenting. This brings the stack up on a clean
+      # volume, which is also the only place the TimescaleDB migration --
+      # hypertable DDL included -- actually runs.
+      - name: Build images
+        run: docker compose build server dashboard
+
+      - name: Start the stack
+        run: |
+          cp .env.example .env
+          docker compose up -d
+
+      - name: Wait for the server to report healthy
+        run: |
+          for _ in $(seq 1 30); do
+            if curl -fs http://localhost:8000/health > /dev/null; then
+              echo "server healthy"; exit 0
+            fi
+            sleep 5
+          done
+          echo "server never became healthy"; docker compose logs server; exit 1
+
+      - name: Confirm migrations created the hypertable
+        run: |
+          docker compose exec -T timescaledb \
+            psql -U retailvision -d retailvision -tAc \
+            "SELECT hypertable_name FROM timescaledb_information.hypertables;" | grep -q detection_events
+
+      - name: Show logs on failure
+        if: failure()
+        run: docker compose logs
