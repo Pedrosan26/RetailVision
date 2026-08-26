@@ -47,6 +47,25 @@ DEFAULT_MERGE_RADIUS_METERS = 1.0
 DEFAULT_FRAME_WINDOW = timedelta(milliseconds=400)
 
 
+# Track clustering, below, answers a different question to the headcount above:
+# not "how many people are here now" but "which of these tracks are the same
+# person", which is what every historical count needs and none of them had.
+
+# Two tracks must overlap in time by at least this much before their positions
+# are compared at all. A brief overlap is not evidence: two people passing each
+# other are close for a moment, and a hundred milliseconds of proximity would
+# merge them.
+DEFAULT_MIN_OVERLAP = timedelta(seconds=2)
+
+# Positions are compared at paired moments no further apart than this. Cameras
+# do not sample on a shared clock, so a point from one is matched to the
+# nearest in time from the other, and anything further apart is not a pair.
+DEFAULT_PAIRING_TOLERANCE = timedelta(milliseconds=500)
+
+# How many paired samples a comparison needs before its median means anything.
+MIN_PAIRED_SAMPLES = 4
+
+
 @dataclass(frozen=True)
 class Observation:
     """One camera's sighting of a person at a world floor position."""
@@ -117,3 +136,182 @@ def deduplicated_headcount(
     frames = latest_frame_per_camera(observations, frame_window)
     per_camera = {camera_node_id: len(sightings) for camera_node_id, sightings in frames.items()}
     return merge_across_cameras(frames, merge_radius), per_camera
+
+
+@dataclass(frozen=True)
+class TrackKey:
+    """Identifies one track: a camera node and the track id it assigned."""
+
+    camera_node_id: str
+    track_id: str
+
+
+@dataclass
+class TrackPath:
+    """Where one track was, over time, in the zone's shared world frame."""
+
+    key: TrackKey
+    points: list[tuple[datetime, float, float]]
+
+    def sorted_points(self) -> list[tuple[datetime, float, float]]:
+        """The path in time order, which the overlap arithmetic below assumes."""
+        return sorted(self.points, key=lambda point: point[0])
+
+    @property
+    def span(self) -> tuple[datetime, datetime]:
+        """First and last moment this track was seen."""
+        times = [point[0] for point in self.points]
+        return min(times), max(times)
+
+
+def _median(values: list[float]) -> float:
+    """Middle value of a non-empty list, averaging the two middles when even."""
+    ordered = sorted(values)
+    middle = len(ordered) // 2
+    if len(ordered) % 2:
+        return ordered[middle]
+    return (ordered[middle - 1] + ordered[middle]) / 2
+
+
+def paired_distances(
+    left: TrackPath, right: TrackPath, tolerance: timedelta = DEFAULT_PAIRING_TOLERANCE
+) -> list[float]:
+    """Distances between two tracks at the moments both were seen.
+
+    Cameras do not share a sampling clock, so each point on the shorter
+    path is matched to the nearest point in time on the other and dropped
+    if the nearest is still too far away. Comparing positions recorded at
+    different moments would measure how fast someone walks, not whether
+    two tracks are the same person.
+    """
+    other = right.sorted_points()
+    if not other:
+        return []
+
+    distances = []
+    for when, x, y in left.sorted_points():
+        nearest = min(other, key=lambda point: abs(point[0] - when))
+        if abs(nearest[0] - when) > tolerance:
+            continue
+        distances.append(math.hypot(x - nearest[1], y - nearest[2]))
+    return distances
+
+
+def same_person(
+    left: TrackPath,
+    right: TrackPath,
+    merge_radius: float = DEFAULT_MERGE_RADIUS_METERS,
+    min_overlap: timedelta = DEFAULT_MIN_OVERLAP,
+    tolerance: timedelta = DEFAULT_PAIRING_TOLERANCE,
+) -> bool:
+    """Whether two tracks were the same person, judged by where they were while both were visible.
+
+    Three conditions, each ruling out a way of being wrong:
+
+    Different cameras. One camera reporting two tracks is reporting two
+    people, however close together -- collapsing those would undercount a
+    queue or a group, which is what occupancy is most used to measure.
+
+    A real overlap. Two people passing each other are briefly in the same
+    place, so a short coincidence proves nothing and the tracks must have
+    been seen together for a sustained period.
+
+    Sustained proximity, by median rather than mean. Position error spikes
+    when someone is momentarily occluded or their feet leave the frame,
+    and a mean lets a handful of those decide the answer.
+    """
+    if left.key.camera_node_id == right.key.camera_node_id:
+        return False
+
+    left_start, left_end = left.span
+    right_start, right_end = right.span
+    overlap = min(left_end, right_end) - max(left_start, right_start)
+    if overlap < min_overlap:
+        return False
+
+    distances = paired_distances(left, right, tolerance)
+    if len(distances) < MIN_PAIRED_SAMPLES:
+        return False
+    return _median(distances) <= merge_radius
+
+
+def cluster_tracks(
+    paths: Sequence[TrackPath],
+    merge_radius: float = DEFAULT_MERGE_RADIUS_METERS,
+    min_overlap: timedelta = DEFAULT_MIN_OVERLAP,
+    tolerance: timedelta = DEFAULT_PAIRING_TOLERANCE,
+) -> dict[TrackKey, str]:
+    """Group tracks into people, returning the person id each track belongs to.
+
+    Union-find over the pairwise test, so linking is transitive: three
+    cameras watching one person produce three tracks that all reach the
+    same person even where one pair never matched directly.
+
+    The person id is the smallest track key in the group rather than a
+    counter, so it is stable -- the same query run twice, or run over a
+    wider window, names the same person the same way instead of
+    renumbering everyone.
+    """
+    parent: dict[TrackKey, TrackKey] = {path.key: path.key for path in paths}
+
+    def find(key: TrackKey) -> TrackKey:
+        while parent[key] != key:
+            parent[key] = parent[parent[key]]
+            key = parent[key]
+        return key
+
+    def union(a: TrackKey, b: TrackKey) -> None:
+        root_a, root_b = find(a), find(b)
+        if root_a == root_b:
+            return
+        # Keep the smaller key as the root so the group's name does not
+        # depend on which order the pairs happened to be compared in.
+        low, high = sorted([root_a, root_b], key=lambda k: (k.camera_node_id, k.track_id))
+        parent[high] = low
+
+    for index, left in enumerate(paths):
+        for right in paths[index + 1 :]:
+            if same_person(left, right, merge_radius, min_overlap, tolerance):
+                union(left.key, right.key)
+
+    return {path.key: f"{find(path.key).camera_node_id}:{find(path.key).track_id}" for path in paths}
+
+
+def person_ids_for_events(
+    events: Iterable,
+    merge_radius: float = DEFAULT_MERGE_RADIUS_METERS,
+    min_overlap: timedelta = DEFAULT_MIN_OVERLAP,
+) -> dict[tuple[str, str], str]:
+    """Map each (camera_node_id, track_id) in these events to the person it belongs to.
+
+    The single place the endpoints agree on who a person is. Before this,
+    each of them keyed identity on (camera, track) independently, which
+    meant every historical figure counted one visitor once per camera that
+    could see them.
+
+    Events with no world position cannot be compared to anything, so they
+    keep their own track as their person -- the pre-zone behaviour, applied
+    only to rows that give no better option rather than to all of them.
+    """
+    by_track: dict[tuple[str, str], list[tuple[datetime, float, float]]] = {}
+    unpositioned: set[tuple[str, str]] = set()
+
+    for event in events:
+        if event.track_id is None:
+            continue
+        key = (event.camera_node_id, event.track_id)
+        if event.world_x is None or event.world_y is None:
+            unpositioned.add(key)
+            continue
+        by_track.setdefault(key, []).append((event.timestamp, event.world_x, event.world_y))
+
+    paths = [
+        TrackPath(TrackKey(camera_node_id, track_id), points)
+        for (camera_node_id, track_id), points in by_track.items()
+    ]
+    clustered = cluster_tracks(paths, merge_radius, min_overlap)
+
+    resolved = {(key.camera_node_id, key.track_id): person for key, person in clustered.items()}
+    for camera_node_id, track_id in unpositioned:
+        resolved.setdefault((camera_node_id, track_id), f"{camera_node_id}:{track_id}")
+    return resolved

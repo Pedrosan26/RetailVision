@@ -23,6 +23,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
+from ..dedup import person_ids_for_events
 from ..models.detection import DetectionEvent
 from ..schemas.detection import VisitOut
 from ..utils import as_utc
@@ -58,12 +59,20 @@ async def get_visits(
         stmt = stmt.where(DetectionEvent.camera_node_id == camera_node_id)
     events = (await db.execute(stmt)).scalars().all()
 
-    grouped: dict[tuple[str, str], list[DetectionEvent]] = {}
+    # A visit is a person's stay, not a camera's view of it. Grouping by track
+    # produced one row per camera that could see them, so a visitor walking
+    # through a room covered by three cameras appeared as three separate
+    # visitors with three separate durations, each shorter than the real one.
+    person_ids = person_ids_for_events(events)
+
+    grouped: dict[str, list[DetectionEvent]] = {}
     for event in events:
-        grouped.setdefault((event.camera_node_id, event.track_id), []).append(event)
+        person = person_ids.get((event.camera_node_id, event.track_id), f"{event.camera_node_id}:{event.track_id}")
+        grouped.setdefault(person, []).append(event)
 
     visits = []
-    for (node, track), rows in grouped.items():
+    for person, rows in grouped.items():
+        node, track = person.split(":", 1)
         rows.sort(key=lambda e: as_utc(e.timestamp))
         emotions = Counter(e.emotion for e in rows)
         # Zone is the mode of the non-null sightings: a person is "in" the

@@ -21,6 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
+from ..dedup import person_ids_for_events
 from ..models.detection import DetectionEvent
 from ..schemas.detection import SummaryOut
 from ..utils import as_utc
@@ -31,9 +32,20 @@ DEFAULT_LOOKBACK = timedelta(hours=24)
 HOUR = timedelta(hours=1)
 
 
-def _person_key(event: DetectionEvent) -> tuple[str, str]:
-    """One person is one track within one camera node; pre-track rows count as one person each."""
-    return (event.camera_node_id, event.track_id or f"row-{event.id}")
+def _person_key(event: DetectionEvent, people: dict[tuple[str, str], str]) -> str:
+    """The person this event belongs to, merged across the cameras that saw them.
+
+    A track is not a person: three cameras watching one room report the
+    same visitor as three tracks, and counting tracks counted them three
+    times. `people` maps each track to the person it was clustered into,
+    from their world positions while several cameras saw them at once.
+
+    A row with no track id at all predates per-person emission and counts
+    as one person, which is the most that can be said about it.
+    """
+    if event.track_id is None:
+        return f"{event.camera_node_id}:row-{event.id}"
+    return people.get((event.camera_node_id, event.track_id), f"{event.camera_node_id}:{event.track_id}")
 
 
 @router.get("/summary", response_model=SummaryOut)
@@ -59,17 +71,19 @@ async def get_summary(
     # Busiest hour: distinct people per hour-aligned bucket, peak wins. A person
     # spanning two hours counts in both, which is what "how busy was that hour"
     # means -- they were there during it.
-    per_hour: dict[int, set[tuple[str, str]]] = {}
+    people = person_ids_for_events(events)
+
+    per_hour: dict[int, set[str]] = {}
     for event in events:
         index = (as_utc(event.timestamp) - range_since) // HOUR
-        per_hour.setdefault(index, set()).add(_person_key(event))
+        per_hour.setdefault(index, set()).add(_person_key(event, people))
     busiest_index = max(per_hour, key=lambda i: len(per_hour[i]), default=None)
 
     return SummaryOut(
         since=range_since,
         until=range_until,
         total_detections=len(events),
-        unique_people=len({_person_key(e) for e in events}),
+        unique_people=len({_person_key(e, people) for e in events}),
         avg_dwell_seconds=sum(dwell_values) / len(dwell_values) if dwell_values else None,
         emotion_distribution=dict(Counter(e.emotion for e in events)),
         busiest_hour_start=None if busiest_index is None else range_since + busiest_index * HOUR,

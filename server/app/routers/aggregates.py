@@ -21,6 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
+from ..dedup import person_ids_for_events
 from ..models.detection import DetectionEvent
 from ..schemas.detection import AggregateBucket
 from ..utils import as_utc
@@ -51,15 +52,22 @@ def bucket_events(events: list[DetectionEvent], since: datetime, window: timedel
         buckets.setdefault(index, []).append(event)
 
     result = []
+    # One clustering pass over every event in range, shared by all buckets.
+    person_ids = person_ids_for_events(events)
+
     for index in sorted(buckets):
         bucket = buckets[index]
         dwell_values = [e.dwell_seconds for e in bucket if e.dwell_seconds is not None]
         engagement_values = [e.engagement_score for e in bucket if e.engagement_score is not None]
-        # A person is one track within one camera node, so the pair is the
-        # identity. Rows from a node too old to send a track_id fall back to
-        # counting as one person each, which is what they were before.
+        # A person is not a track: cameras watching one area each report the
+        # same visitor separately, so counting tracks counted them once per
+        # camera. Clustering is done once over the whole range rather than per
+        # bucket, so someone spanning two buckets stays one person in both
+        # instead of being re-derived either side of the boundary.
         people = {
-            (e.camera_node_id, e.track_id) if e.track_id else (e.camera_node_id, f"row-{e.id}")
+            person_ids.get((e.camera_node_id, e.track_id), f"{e.camera_node_id}:row-{e.id}")
+            if e.track_id
+            else f"{e.camera_node_id}:row-{e.id}"
             for e in bucket
         }
         result.append(
