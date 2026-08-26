@@ -73,7 +73,7 @@ export function ZoneOccupancyGrid() {
             <div className="mt-3 space-y-1 border-t border-[var(--app-line)] pt-3">
               {cameras.map(([cameraNodeId, count]) => (
                 <div key={cameraNodeId} className="flex items-baseline justify-between text-sm">
-                  <span className="truncate text-[var(--app-ink-secondary)]">{cameraNodeId}</span>
+                  <span className="min-w-0 truncate text-[var(--app-ink-secondary)]">{cameraNodeId}</span>
                   <span className="tabular-nums text-[var(--app-ink)]">{count}</span>
                 </div>
               ))}

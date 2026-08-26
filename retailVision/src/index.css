@@ -2,18 +2,29 @@
 
 /* One token system for the whole dashboard.
  *
- * The neutrals are a cool gray ramp on white surfaces -- the grammar of
- * operations dashboards (monitoring tools, consoles), where the chrome is
- * deliberately unremarkable so the numbers are the loudest thing on the
- * page. One blue carries every interactive affordance; status colours are
- * reserved for status. Chart colours and interface chrome are drawn from
- * the same set deliberately: a chart wearing a different palette to the
- * panel around it reads as two systems bolted together.
+ * The neutrals are a warm graphite ramp -- greys carrying a slight red-yellow
+ * bias rather than the blue one most consoles default to. It is a quiet
+ * difference on any single surface and a clear one across a whole page, and
+ * it is the reason this does not read as a copy of a familiar developer tool.
  *
- * Both modes are chosen, not derived. Dark is the same roles re-stepped
- * for a dark surface -- inverting a light palette drifts the series
- * colours out of the lightness band where they stay distinguishable to
- * colour-blind readers.
+ * The accent is plum. It is not blue, and it is not one of the three status
+ * hues, which is what makes it usable for affordances: a selected control can
+ * never be mistaken for a healthy one. It is stepped darker in light mode and
+ * lighter in dark so it clears text contrast on either ground while staying
+ * the same hue as categorical slot 1 -- a highlighted control and the leading
+ * data series should be recognisably the same colour.
+ *
+ * Chart colours and interface chrome are drawn from one set deliberately: a
+ * chart wearing a different palette to the panel around it reads as two
+ * systems bolted together.
+ *
+ * Both modes are chosen, not derived. Dark is the same five hues re-stepped
+ * against a dark surface -- inverting a light palette drifts the series out
+ * of the lightness band where they stay distinguishable to colour-blind
+ * readers. Every value below was checked rather than eyeballed: the
+ * categorical set passes lightness-band, chroma-floor, CVD-separation,
+ * normal-vision and contrast checks in both modes, and every ink and status
+ * colour clears 4.5:1 against the surface it sits on.
  *
  * Components reference these as arbitrary values (bg-[var(--app-surface)]),
  * so one class covers both modes and the values live in exactly one place.
@@ -24,121 +35,121 @@
   color-scheme: light;
 
   /* Planes, back to front. */
-  --app-page: #f6f7f8;
+  --app-page: #f7f6f4;
   --app-surface: #ffffff;
   --app-raised: #ffffff;
 
   /* Ink. */
-  --app-ink: #17191c;
-  --app-ink-secondary: #4b5259;
-  --app-ink-muted: #7d8590;
+  --app-ink: #1c1a19;
+  --app-ink-secondary: #55504b;
+  --app-ink-muted: #6f6862;
 
   /* Lines. Hairlines, deliberately quieter than the text they separate. */
-  --app-line: #e3e6ea;
-  --app-line-strong: #ccd2d9;
+  --app-line: #e8e5e1;
+  --app-line-strong: #d3cfc9;
 
-  /* Accent, matching categorical slot 1 so a highlighted control and a
-     leading data series are recognisably the same blue. */
-  --app-accent: #1f6feb;
+  /* Accent: same hue as categorical slot 1, stepped darker so it clears
+     text contrast on white. */
+  --app-accent: #7a4790;
   --app-accent-ink: #ffffff;
-  --app-accent-wash: #eaf2fd;
+  --app-accent-wash: #f4eef7;
 
   /* Status. Reserved -- never reused as a series colour, and always paired
      with a label so meaning never rests on hue alone. */
-  --app-good: #1a7f37;
-  --app-warning: #9a6700;
-  --app-critical: #cf222e;
-  --app-critical-wash: #fdebec;
+  --app-good: #1f7a4d;
+  --app-warning: #8a6500;
+  --app-critical: #b3261e;
+  --app-critical-wash: #fbeae8;
 
   /* Chart roles. */
   --viz-surface: #ffffff;
-  --viz-ink: #17191c;
-  --viz-ink-secondary: #4b5259;
-  --viz-ink-muted: #7d8590;
-  --viz-grid: #e9ebee;
-  --viz-axis: #ccd2d9;
+  --viz-ink: #1c1a19;
+  --viz-ink-secondary: #55504b;
+  --viz-ink-muted: #6f6862;
+  --viz-grid: #ecebe7;
+  --viz-axis: #d3cfc9;
 
-  --viz-series-1: #1f6feb;
-  --viz-series-2: #e16f24;
-  --viz-series-3: #189e6e;
-  --viz-series-4: #b88700;
-  --viz-series-5: #d0679d;
+  --viz-series-1: #8a4f9e;
+  --viz-series-2: #c2571f;
+  --viz-series-3: #0b8a74;
+  --viz-series-4: #9a7400;
+  --viz-series-5: #b23a5f;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    color-scheme: dark;
+  color-scheme: dark;
 
-    --app-page: #0d1117;
-    --app-surface: #161b22;
-    --app-raised: #1c222b;
+  --app-page: #131211;
+  --app-surface: #1b1a18;
+  --app-raised: #232120;
 
-    --app-ink: #e6edf3;
-    --app-ink-secondary: #a3aeb9;
-    --app-ink-muted: #768390;
+  --app-ink: #ece8e3;
+  --app-ink-secondary: #aca59d;
+  --app-ink-muted: #979088;
 
-    --app-line: #262c34;
-    --app-line-strong: #3a424c;
+  --app-line: #2c2a27;
+  --app-line-strong: #423e3a;
 
-    --app-accent: #4493f8;
-    --app-accent-ink: #0d1117;
-    --app-accent-wash: #12233b;
+  --app-accent: #b98fd0;
+  --app-accent-ink: #1b1a18;
+  --app-accent-wash: #2a2033;
 
-    --app-good: #3fb950;
-    --app-warning: #d29922;
-    --app-critical: #f85149;
-    --app-critical-wash: #331b1d;
+  --app-good: #46b57d;
+  --app-warning: #cfa53a;
+  --app-critical: #f2685c;
+  --app-critical-wash: #33201e;
 
-    --viz-surface: #161b22;
-    --viz-ink: #e6edf3;
-    --viz-ink-secondary: #a3aeb9;
-    --viz-ink-muted: #768390;
-    --viz-grid: #262c34;
-    --viz-axis: #3a424c;
+  --viz-surface: #1b1a18;
+  --viz-ink: #ece8e3;
+  --viz-ink-secondary: #aca59d;
+  --viz-ink-muted: #979088;
+  --viz-grid: #2c2a27;
+  --viz-axis: #423e3a;
 
-    --viz-series-1: #4493f8;
-    --viz-series-2: #d0651a;
-    --viz-series-3: #17936a;
-    --viz-series-4: #b68a00;
-    --viz-series-5: #c85f92;
-  }
+  --viz-series-1: #a271bb;
+  --viz-series-2: #cd7238;
+  --viz-series-3: #1d9c84;
+  --viz-series-4: #ae8c1e;
+  --viz-series-5: #c65e80;
+}
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  --app-page: #0d1117;
-  --app-surface: #161b22;
-  --app-raised: #1c222b;
+  --app-page: #131211;
+  --app-surface: #1b1a18;
+  --app-raised: #232120;
 
-  --app-ink: #e6edf3;
-  --app-ink-secondary: #a3aeb9;
-  --app-ink-muted: #768390;
+  --app-ink: #ece8e3;
+  --app-ink-secondary: #aca59d;
+  --app-ink-muted: #979088;
 
-  --app-line: #262c34;
-  --app-line-strong: #3a424c;
+  --app-line: #2c2a27;
+  --app-line-strong: #423e3a;
 
-  --app-accent: #4493f8;
-  --app-accent-ink: #0d1117;
-  --app-accent-wash: #12233b;
+  --app-accent: #b98fd0;
+  --app-accent-ink: #1b1a18;
+  --app-accent-wash: #2a2033;
 
-  --app-good: #3fb950;
-  --app-warning: #d29922;
-  --app-critical: #f85149;
-  --app-critical-wash: #331b1d;
+  --app-good: #46b57d;
+  --app-warning: #cfa53a;
+  --app-critical: #f2685c;
+  --app-critical-wash: #33201e;
 
-  --viz-surface: #161b22;
-  --viz-ink: #e6edf3;
-  --viz-ink-secondary: #a3aeb9;
-  --viz-ink-muted: #768390;
-  --viz-grid: #262c34;
-  --viz-axis: #3a424c;
+  --viz-surface: #1b1a18;
+  --viz-ink: #ece8e3;
+  --viz-ink-secondary: #aca59d;
+  --viz-ink-muted: #979088;
+  --viz-grid: #2c2a27;
+  --viz-axis: #423e3a;
 
-  --viz-series-1: #4493f8;
-  --viz-series-2: #d0651a;
-  --viz-series-3: #17936a;
-  --viz-series-4: #b68a00;
-  --viz-series-5: #c85f92;
+  --viz-series-1: #a271bb;
+  --viz-series-2: #cd7238;
+  --viz-series-3: #1d9c84;
+  --viz-series-4: #ae8c1e;
+  --viz-series-5: #c65e80;
 }
 
 body {
@@ -147,8 +158,10 @@ body {
   font-feature-settings: "cv05";
 }
 
-/* Keyboard focus stays visible everywhere; the accent ring is the same blue
-   as the active nav item, so "this is where you are" reads consistently. */
+/* Keyboard focus stays visible everywhere, defined once here rather than per
+   component: a focus style that has to be remembered on each new button is one
+   that will eventually be forgotten. The ring is the accent, the same colour as
+   the active nav item, so "this is where you are" reads consistently. */
 :focus-visible {
   outline: 2px solid var(--app-accent);
   outline-offset: 2px;

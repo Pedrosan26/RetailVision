@@ -323,7 +323,7 @@ export function StackedAreaChart({
                     className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
                     style={{ background: bands[focused].colour }}
                   />
-                  <span className="truncate text-xs font-medium text-[var(--app-ink)]">
+                  <span className="min-w-0 truncate text-xs font-medium text-[var(--app-ink)]">
                     {bands[focused].name}
                   </span>
                 </div>
@@ -349,7 +349,7 @@ export function StackedAreaChart({
                           className="inline-block h-2 w-2 shrink-0 translate-y-px rounded-full opacity-60"
                           style={{ background: band.colour }}
                         />
-                        <span className="truncate text-[var(--app-ink-muted)]">{band.name}</span>
+                        <span className="min-w-0 truncate text-[var(--app-ink-muted)]">{band.name}</span>
                         <span className="ml-auto shrink-0 tabular-nums text-[var(--app-ink-secondary)]">
                           {series[seriesIndex].values[hover.index] ?? 0}
                         </span>
@@ -377,7 +377,7 @@ export function StackedAreaChart({
                           className="inline-block h-2.5 w-2.5 shrink-0 translate-y-px rounded-full"
                           style={{ background: band.colour }}
                         />
-                        <span className="truncate text-[var(--app-ink-secondary)]">{band.name}</span>
+                        <span className="min-w-0 truncate text-[var(--app-ink-secondary)]">{band.name}</span>
                         <span className="ml-auto shrink-0 tabular-nums font-medium text-[var(--app-ink)]">
                           {value}
                         </span>

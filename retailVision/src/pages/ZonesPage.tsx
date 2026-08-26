@@ -139,7 +139,7 @@ export function ZonesPage() {
             <div className="flex flex-col gap-1.5">
               {cameras.map(([cameraNodeId, count]) => (
                 <div key={cameraNodeId} className="flex items-baseline justify-between gap-2 text-sm">
-                  <span className="truncate text-[var(--app-ink-secondary)]">{cameraNodeId}</span>
+                  <span className="min-w-0 truncate text-[var(--app-ink-secondary)]">{cameraNodeId}</span>
                   <span className="tabular-nums text-[var(--app-ink)]">{count}</span>
                 </div>
               ))}

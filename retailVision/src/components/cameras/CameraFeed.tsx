@@ -18,11 +18,15 @@ export function CameraFeed({ cameraNodeId }: CameraFeedProps) {
   return (
     <figure className="m-0">
       <div className="relative overflow-hidden rounded-lg border border-[var(--app-line)] bg-black">
+        {/* The box keeps its aspect ratio whether or not a frame has arrived,
+            so the placeholder-to-video swap cannot shift the page. A live
+            stream has no width/height to declare up front, and reserving the
+            space is what that rule is actually protecting against. */}
         {frameUrl ? (
           <img
             src={frameUrl}
             alt={`Live view from ${cameraNodeId}, with detected faces outlined`}
-            className="mx-auto block max-h-[75vh] w-full object-contain"
+            className="mx-auto block aspect-video max-h-[75vh] w-full object-contain"
           />
         ) : (
           <div className="flex aspect-video w-full items-center justify-center px-6 text-center text-sm text-[var(--app-ink-muted)]">
