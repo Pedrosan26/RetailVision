@@ -16,7 +16,7 @@
 // picture of where the system believes people are -- the honest framing for
 // judging whether the zone geometry and the positions agree with the room.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useRecentDetections } from "../../hooks/useRecentDetections";
 import { useZoneGeometry } from "../../hooks/useZoneGeometry";
 import { EmptyState } from "../common/ui";
@@ -29,6 +29,12 @@ const PADDING_METERS = 0.6;
 const SVG_WIDTH = 720;
 const MAX_ZOOM = 8;
 const WHEEL_STEP = 1.15;
+// The step the zoom buttons and the keyboard +/- keys share, so both
+// routes through the same control move by the same amount.
+const BUTTON_ZOOM_STEP = 1.5;
+// One arrow press pans a tenth of the visible span: small enough to be
+// precise when zoomed in, large enough to cross the map in a few presses.
+const PAN_STEP = 0.1;
 const TOOLTIP_WIDTH = 200;
 
 interface CellStats {
@@ -74,6 +80,7 @@ export function ZoneHeatmap({ zoneId }: { zoneId: string }) {
   // null view = fit-to-zone; a View = zoomed/panned viewBox in base svg units.
   const [view, setView] = useState<View | null>(null);
   const [hover, setHover] = useState<Hover | null>(null);
+  const keyboardHintId = useId();
 
   const zone = geometry?.find((g) => g.zone_id === zoneId);
 
@@ -206,20 +213,60 @@ export function ZoneHeatmap({ zoneId }: { zoneId: string }) {
     dragRef.current = null;
   }
 
+  // Pan and zoom are otherwise pointer-only -- drag to pan, wheel to zoom --
+  // which leaves the map inoperable without a mouse. Arrow keys pan, +/- zoom
+  // by the same step as the buttons, and 0 returns to fit.
+  function onKeyDown(event: React.KeyboardEvent<SVGSVGElement>) {
+    const pan: Record<string, [number, number]> = {
+      ArrowLeft: [-1, 0],
+      ArrowRight: [1, 0],
+      ArrowUp: [0, -1],
+      ArrowDown: [0, 1],
+    };
+    const direction = pan[event.key];
+    if (direction) {
+      // At fit the whole zone is already visible, so there is nowhere to pan.
+      if (!view) return;
+      event.preventDefault();
+      const [dx, dy] = direction;
+      setView({ ...view, x: view.x + dx * view.w * PAN_STEP, y: view.y + dy * view.h * PAN_STEP });
+      return;
+    }
+    if (event.key === "+" || event.key === "=") {
+      event.preventDefault();
+      zoomBy(1 / BUTTON_ZOOM_STEP);
+    } else if (event.key === "-") {
+      event.preventDefault();
+      zoomBy(BUTTON_ZOOM_STEP);
+    } else if (event.key === "0") {
+      event.preventDefault();
+      setView(null);
+    }
+  }
+
   const flip = hover !== null && hover.x + TOOLTIP_WIDTH + 24 > (containerRef.current?.clientWidth ?? 0);
 
   return (
     <div>
       {/* Capped rather than full-column: a floor map wants to be glanceable
           next to everything else, and the zoom exists for close reading. */}
+      <p id={keyboardHintId} className="sr-only">
+        Arrow keys pan the map, plus and minus zoom, zero resets to fit.
+      </p>
       <div ref={containerRef} className="relative mx-auto w-full max-w-[30rem]">
+        {/* role is "group", not "img": img declares a static graphic and
+            tells assistive technology to skip the children, which is wrong
+            for something focusable and pannable. */}
         <svg
           ref={svgRef}
           viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`}
-          className="block h-auto max-h-[30rem] w-full touch-none"
+          className="block h-auto max-h-[30rem] w-full touch-none rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--app-accent)]"
           style={{ cursor: view ? "grab" : "default" }}
-          role="img"
+          role="group"
+          tabIndex={0}
           aria-label={`Floor map of ${zoneId} with position heat and live people`}
+          aria-describedby={keyboardHintId}
+          onKeyDown={onKeyDown}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
@@ -297,10 +344,10 @@ export function ZoneHeatmap({ zoneId }: { zoneId: string }) {
 
         {/* Zoom controls: an overlay, not chart content. */}
         <div className="absolute right-2 top-2 flex flex-col overflow-hidden rounded-md border border-[var(--app-line-strong)] bg-[var(--app-raised)]">
-          <button type="button" aria-label="Zoom in" onClick={() => zoomBy(1 / 1.5)} className="px-2 py-1 text-sm text-[var(--app-ink-secondary)] hover:bg-[var(--app-accent-wash)]">
+          <button type="button" aria-label="Zoom in" onClick={() => zoomBy(1 / BUTTON_ZOOM_STEP)} className="px-2 py-1 text-sm text-[var(--app-ink-secondary)] hover:bg-[var(--app-accent-wash)]">
             +
           </button>
-          <button type="button" aria-label="Zoom out" onClick={() => zoomBy(1.5)} className="border-t border-[var(--app-line)] px-2 py-1 text-sm text-[var(--app-ink-secondary)] hover:bg-[var(--app-accent-wash)]">
+          <button type="button" aria-label="Zoom out" onClick={() => zoomBy(BUTTON_ZOOM_STEP)} className="border-t border-[var(--app-line)] px-2 py-1 text-sm text-[var(--app-ink-secondary)] hover:bg-[var(--app-accent-wash)]">
             −
           </button>
           <button type="button" aria-label="Reset zoom" onClick={() => setView(null)} disabled={!view} className="border-t border-[var(--app-line)] px-2 py-1 text-xs text-[var(--app-ink-muted)] hover:bg-[var(--app-accent-wash)] disabled:opacity-40">

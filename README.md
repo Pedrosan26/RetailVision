@@ -57,32 +57,60 @@ rate from roughly 300 records per person per minute to about 6.
 
 ## Quick start
 
-Requires **Python 3.12**, **Node 22**, and Docker.
+The server stack -- database, API and dashboard -- runs in Docker:
 
 ```bash
-# 1. Camera node
-python3.12 -m venv venv && ./venv/bin/pip install -r requirements.txt
-
-# 2. Server + database
-cp .env.example .env && docker compose up -d timescaledb
-cd server && python3.12 -m venv venv && ./venv/bin/pip install -r requirements.txt
-cp .env.example .env && ./venv/bin/alembic upgrade head
-./venv/bin/uvicorn app.main:app --reload --port 8000      # docs at /docs
-
-# 3. Dashboard
-cd retailVision && nvm use && npm install
-cp .env.example .env && npm run dev                        # http://localhost:5173
+cp .env.example .env        # set database credentials and camera-node API keys
+docker compose up
 ```
 
-Then run a camera node:
+| | |
+|---|---|
+| Dashboard | http://localhost:8080 |
+| API docs | http://localhost:8000/docs |
+| Database | `localhost:5433` |
+
+The server container applies `alembic upgrade head` before it starts, so
+a fresh checkout builds its own schema and an existing one is left
+alone -- there is no separate migration step to forget.
+
+Camera nodes are **not** compose services. A node needs the camera
+attached to the machine it runs on, so it belongs on that hardware
+rather than in a container here. Run one against the stack:
 
 ```bash
+python3.12 -m venv venv && ./venv/bin/pip install -r requirements.txt
+
 PYTHONPATH=. ./venv/bin/python3 -m src.retailvision.pipeline_demo \
   --source 0 \
   --server-url http://localhost:8000 --camera-node-id cam-1 --api-key <key>
 ```
 
-`--source` takes a camera index or a video file path. Press `q` to quit.
+`--source` takes a camera index or a video file path. The `--api-key`
+must match an entry in `CAMERA_NODE_API_KEYS`. Press `q` to quit.
+
+<details>
+<summary><b>Running the server or dashboard on the host instead</b></summary>
+
+Faster loop when developing either one -- the database still comes from
+compose, and naming a single service starts only that service:
+
+```bash
+docker compose up -d timescaledb
+
+cd server && python3.12 -m venv venv && ./venv/bin/pip install -r requirements.txt
+cp .env.example .env && ./venv/bin/alembic upgrade head
+./venv/bin/uvicorn app.main:app --reload --port 8000
+
+cd retailVision && nvm use && npm install
+cp .env.example .env && npm run dev        # http://localhost:5173
+```
+
+`server/.env` points at `localhost:5433`; the compose file overrides
+`DATABASE_URL` to `timescaledb:5432` for the containerized server, since
+the published port only exists for host processes. The API allows both
+origins, so a host dev server can talk to the containerized API.
+</details>
 
 <details>
 <summary><b>Environment notes</b></summary>
@@ -95,6 +123,9 @@ PYTHONPATH=. ./venv/bin/python3 -m src.retailvision.pipeline_demo \
   "succeeds" and `npm run dev` then crashes on a missing binding.
 - **TimescaleDB is on host port 5433**, not 5432, to avoid clashing with
   a locally installed Postgres.
+- **The dashboard is on 8080 in Docker, 5173 under `npm run dev`** — two
+  ports so a container and a dev server can run side by side. The API
+  allows both origins.
 - `opencv-python` is pinned. A later release shipped a macOS build
   missing `cv2.CascadeClassifier` and its bundled cascade files.
   Production code no longer uses either, but the pin has not been
@@ -112,10 +143,10 @@ by every node.
 
 ```bash
 # 1. Calibrate each camera's intrinsics (once per physical camera)
-PYTHONPATH=. ./venv/bin/python3 scripts/calibrate_camera.py --source 0 --output calibration/camera_0.json
+PYTHONPATH=. ./venv/bin/python3 scripts/setup/calibrate_camera.py --source 0 --output calibration/camera_0.json
 
 # 2. Survey the markers into a shared world frame
-PYTHONPATH=. ./venv/bin/python3 scripts/aruco_pose_test.py \
+PYTHONPATH=. ./venv/bin/python3 scripts/setup/aruco_pose_test.py \
   --source 0 1 2 \
   --calibration calibration/camera_0.json calibration/camera_1.json calibration/camera_2.json \
   --marker-size 0.14 --anchor 3 --marker-mounting wall --marker-height 2.4 \
@@ -155,14 +186,17 @@ cannot fold a dent into the perimeter.
 ## What the dashboard shows
 
 - **Overview** — live per-zone occupancy (deduplicated across cameras),
-  KPI strip with week-over-week deltas, live camera feeds, configurable
-  crowding alerts
+  KPI strip with week-over-week deltas, per-node reporting status,
+  configurable crowding alerts
 - **Zones** — per-zone headcount with per-camera contributions, a
   top-down **floor heatmap** (surveyed polygon, position density, live
   person dots, zoom/pan/hover), and historical charts
 - **Visits** — one row per person's stay rather than per detection
   event: arrival, duration, zone, dominant mood, plus stay-duration
   distribution and hour-of-day rhythm
+- **Cameras** — one node's annotated frame at a time, full width, over a
+  WebSocket. Only shows nodes started with `--stream-frames`; see
+  [Privacy design](#privacy-design)
 
 Page sections are reorderable and the arrangement persists per browser.
 
@@ -170,11 +204,12 @@ Page sections are reorderable and the arrangement persists per browser.
 
 ## Privacy design
 
-The constraint is that **no pixel-derived identifier ever leaves a camera
-node**, and the architecture is built around it rather than bolted on:
+The constraint is that **the analytics pipeline moves no pixels**. What
+leaves a camera node as data is labels, counts and coordinates — nothing
+from which a face could be reconstructed or matched:
 
-- Inference is local; only labels, counts and floor coordinates are
-  transmitted
+- Inference is local; the record stream carries only labels, counts and
+  floor coordinates
 - Log records carry no bounding boxes, crops, or face embeddings
 - `track_id` groups one person's records **within one camera and one
   process run**. It is random, survives no restart, and is not comparable
@@ -182,13 +217,19 @@ node**, and the architecture is built around it rather than bolted on:
   them
 - Recognising the same person across cameras is solved **spatially**,
   from world position, never by appearance matching
-- Live frame streaming to the dashboard exists but is **opt-in** behind
-  `--stream-frames`, and is documented as a deliberate trade-off against
-  this design
 
 Re-identification across visits is deliberately not implemented. It
 would make several metrics better and is the one capability this
 architecture rules out on purpose.
+
+**Live view is the exception, and it is deliberately a separate channel.**
+`--stream-frames` opens a WebSocket that sends the annotated preview to
+the server so an operator can see what a camera is actually pointed at.
+It is off unless asked for, the frames are held in the server's memory
+and never written to disk or the database, and they are not part of the
+record stream above — the analytics data is identical whether streaming
+is on or off. A deployment that does not need to check camera aim should
+leave it off, and nothing else stops working.
 
 ---
 
@@ -196,9 +237,9 @@ architecture rules out on purpose.
 
 ```
 src/retailvision/      camera node pipeline
-  detection.py           YOLOv8 face detector
+  detection.py           YOLOv8 face detector, with ByteTrack association (default)
   inference.py           detector + age/gender/emotion classifiers, one call per frame
-  tracking.py            centroid tracker, Hungarian matching
+  tracking.py            centroid tracker, Hungarian matching (--tracker centroid)
   person_track.py        per-person identity voting and change-based emission
   calibration.py         intrinsics, with a self-consistency check
   marker_pose.py         per-marker 3D pose from solvePnP
@@ -207,10 +248,12 @@ src/retailvision/      camera node pipeline
   counter.py             virtual-line crossing counter
   output_log.py          anonymized local record sink
   remote_log.py          batched shipping to the server
+  frame_stream.py        opt-in live preview over a WebSocket
   pipeline_demo.py       wires it together
 
 server/app/            FastAPI service
-  routers/               ingest, detections, occupancy, aggregates, summary, visits, frames, zone geometry
+  routers/               ingest, detections, occupancy, aggregates, summary, visits,
+                         zone geometry, frames (live preview WebSockets)
   models/, schemas/      SQLAlchemy ORM and Pydantic models
   dedup.py               cross-camera spatial deduplication
 migrations/            Alembic
@@ -220,7 +263,13 @@ retailVision/src/      React dashboard
   components/, pages/    charts, occupancy, cameras, layout
   store/                 Zustand, UI state only
 
-scripts/               dataset prep, training, evaluation, camera calibration and survey tools
+scripts/               dataset prep, training and evaluation that produced the models
+  setup/                 calibration, marker generation, camera and marker survey --
+                         the tools you run to deploy a node
+
+docker-compose.yml     the server stack
+  server/Dockerfile      migrations then uvicorn; no torch, inference is on the nodes
+  retailVision/Dockerfile  Vite build served by nginx, with SPA-route fallback
 ```
 
 ---
@@ -240,6 +289,32 @@ applying the migrations for real.
 ---
 
 ## Engineering notes
+
+**Two trackers, and why both are still here.** Faces are followed between
+frames by ByteTrack (`--tracker bytetrack`, the default), which runs
+inside the detector where the per-detection confidence scores still
+exist. Its two-stage association matches confident detections first, then
+tries the low-confidence leftovers against tracks still unmatched instead
+of discarding them — a face that turns or blurs loses confidence well
+before it disappears, and that second pass is what keeps it on one track.
+
+The original centroid tracker (`--tracker centroid`) is kept as the
+baseline, which is what makes the claim checkable. Measured over the
+recorded evaluation clips, same frames through both:
+
+| clip | centroid | ByteTrack |
+|---|---|---|
+| `side_view` | 3 tracks | **2 tracks** |
+| `looking_down` | 2 tracks | 2 tracks |
+| `close_1m` | 1 track | 1 track |
+
+Fewer tracks over identical detections means fewer identity breaks. The
+gain shows up only on the turned-face clip, which is the case the second
+stage exists for, and it costs nothing measurable in frame rate. That is
+a modest result honestly obtained, not a transformation — and worth
+having, because a track that breaks in two reports one visitor as two,
+restarts their dwell timer, and splits their age/gender vote.
+
 
 A few problems whose solutions shaped the system:
 

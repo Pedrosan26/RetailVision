@@ -17,10 +17,10 @@ markers were physically placed. Clicking anywhere in a view back-projects
 that pixel onto a horizontal plane at head height and reports the world
 position and containing zone, standing in for a real face detection.
 
-Requires a calibration per camera from scripts/calibrate_camera.py, and
+Requires a calibration per camera from scripts/setup/calibrate_camera.py, and
 all markers printed at the same physical size passed as --marker-size.
 
-Usage: PYTHONPATH=. ./venv/bin/python3 scripts/aruco_pose_test.py \
+Usage: PYTHONPATH=. ./venv/bin/python3 scripts/setup/aruco_pose_test.py \
     --source 0 --calibration calibration/camera_0.json --marker-size 0.10
 Press 'q' to quit, 'r' to reset the map.
 """

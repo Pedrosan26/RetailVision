@@ -213,13 +213,13 @@ export function DetectionsPage() {
           <Card>
             <CardHeader title="How long people stay" description="Visits by duration. Short spikes are pass-throughs; long tails are workstations." />
             <div className="p-4">
-              <DistributionBars distribution={durationHistogram(visits)} order="given" />
+              <DistributionBars caption="Visits by duration" distribution={durationHistogram(visits)} order="given" />
             </div>
           </Card>
           <Card>
             <CardHeader title="Dominant mood per visit" description="Each visit counted once, by the mood it mostly showed." />
             <div className="p-4">
-              <DistributionBars distribution={moods} />
+              <DistributionBars caption="Visits by dominant mood" distribution={moods} />
             </div>
           </Card>
         </div>
@@ -241,16 +241,17 @@ export function DetectionsPage() {
           />
           <div className="overflow-x-auto">
             <table className="w-full min-w-[52rem] text-sm">
+              <caption className="sr-only">Visits, one row per person's stay, newest first.</caption>
               <thead>
                 <tr className="border-b border-[var(--app-line)] text-left text-[0.7rem] uppercase tracking-[0.08em] text-[var(--app-ink-muted)]">
-                  <th className="px-4 py-2 font-medium">Arrived</th>
-                  <th className="px-4 py-2 text-right font-medium">Stayed</th>
-                  <th className="px-4 py-2 font-medium">Camera</th>
-                  <th className="px-4 py-2 font-medium">Zone</th>
-                  <th className="px-4 py-2 font-medium">Age</th>
-                  <th className="px-4 py-2 font-medium">Gender</th>
-                  <th className="px-4 py-2 font-medium">Mostly</th>
-                  <th className="px-4 py-2 text-right font-medium">Events</th>
+                  <th scope="col" className="px-4 py-2 font-medium">Arrived</th>
+                  <th scope="col" className="px-4 py-2 text-right font-medium">Stayed</th>
+                  <th scope="col" className="px-4 py-2 font-medium">Camera</th>
+                  <th scope="col" className="px-4 py-2 font-medium">Zone</th>
+                  <th scope="col" className="px-4 py-2 font-medium">Age</th>
+                  <th scope="col" className="px-4 py-2 font-medium">Gender</th>
+                  <th scope="col" className="px-4 py-2 font-medium">Mostly</th>
+                  <th scope="col" className="px-4 py-2 text-right font-medium">Events</th>
                 </tr>
               </thead>
               <tbody>

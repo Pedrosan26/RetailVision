@@ -12,12 +12,11 @@ Optionally also ships the same records to a central server in real time
 (see remote_log.py), for deployments running more than one camera node --
 this is a second, independent sink alongside the local log file, not a
 replacement for it.
-Optionally also streams the current annotated frame to the same server
-(see frame_stream.py) so it can be viewed live in the dashboard -- a
-deliberate, temporary trade-off against this project's edge-inference
-privacy design (frames are otherwise never transmitted anywhere), opt-in
-via --stream-frames and independent of the anonymized record shipping
-above.
+Optionally also streams the annotated frame to that server for live
+viewing in the dashboard (see frame_stream.py). This is the one path
+that moves pixels off this machine, so it is opt-in behind
+--stream-frames, off by default, and independent of the anonymized
+record shipping above.
 Supports a headless --benchmark mode (no display) to measure sustained
 FPS, since imshow overhead would otherwise skew the number -- benchmark
 mode has no window to capture a 'q' keypress, so it stops automatically
@@ -108,7 +107,7 @@ def parse_args() -> argparse.Namespace:
         "--marker-map",
         type=Path,
         default=None,
-        help="Surveyed marker map from 'aruco_pose_test.py --save-map'. Required with --zones on a multi-camera setup, "
+        help="Surveyed marker map from 'scripts/setup/aruco_pose_test.py --save-map'. Required with --zones on a multi-camera setup, "
              "since a node that builds its own map would not share a world frame with the others",
     )
     parser.add_argument("--calibration", default=None, help="This camera's calibration JSON, required with --zones")
@@ -128,16 +127,29 @@ def parse_args() -> argparse.Namespace:
         help=f"Plane height in meters that detections back-project onto (default: {DEFAULT_HEAD_HEIGHT_METERS})",
     )
     parser.add_argument(
+        "--tracker",
+        choices=("bytetrack", "centroid"),
+        default="bytetrack",
+        help="How faces are followed between frames: 'bytetrack' uses the detector's own "
+        "confidence-aware tracker, 'centroid' the simpler nearest-centroid matcher (default: bytetrack)",
+    )
+    parser.add_argument(
         "--stream-frames",
         action="store_true",
-        help="Also stream the current annotated frame to the server for live viewing in the dashboard. "
-        "Requires --server-url. Off by default -- see the module docstring for the privacy trade-off.",
+        help="Also stream the annotated frame to the server for live viewing in the dashboard. "
+        "Requires --server-url. Off by default -- this is the only path that sends pixels off this machine.",
+    )
+    parser.add_argument(
+        "--stream-fps",
+        type=float,
+        default=15.0,
+        help="Cap on frames per second sent with --stream-frames (default: 15)",
     )
     args = parser.parse_args()
-    if args.server_url and not (args.camera_node_id and args.api_key):
-        parser.error("--server-url requires both --camera-node-id and --api-key")
     if args.stream_frames and not args.server_url:
         parser.error("--stream-frames requires --server-url")
+    if args.server_url and not (args.camera_node_id and args.api_key):
+        parser.error("--server-url requires both --camera-node-id and --api-key")
     if args.zones and not args.calibration:
         parser.error("--zones requires --calibration, since zone positions are measured in real units")
     if args.marker_map and not args.zones:
@@ -270,8 +282,12 @@ def main() -> None:
     if line_position is None:
         line_position = width / 2 if args.line_axis == "x" else height / 2
 
-    pipeline = InferencePipeline()
-    # The tracker's match radius is how far a person may move between frames
+    use_bytetrack = args.tracker == "bytetrack"
+    pipeline = InferencePipeline(track=use_bytetrack)
+    # Only built for --tracker centroid; ByteTrack assigns ids inside the
+    # detector, where it can use the confidence scores this one never sees.
+    #
+    # The centroid tracker's match radius is how far a person may move between frames
     # and still be the same track. It is measured in pixels, so a fixed number
     # only means something at one resolution -- the same physical motion covers
     # three times as many pixels at 1920 wide as at 640. Expressed as a
@@ -279,7 +295,7 @@ def main() -> None:
     # half a metre of lateral motion at a few metres' range, generous enough
     # for slow movement at low frame rates while staying under typical
     # person-to-person spacing so two neighbours don't swap IDs.
-    tracker = CentroidTracker(max_distance=width * 0.15)
+    tracker = None if use_bytetrack else CentroidTracker(max_distance=width * 0.15)
     registry = TrackRegistry()
     counter = LineCounter(axis=args.line_axis, position=line_position, entry_direction=args.line_direction)
     shipper = None
@@ -318,8 +334,8 @@ def main() -> None:
 
     streamer = None
     if args.stream_frames:
-        streamer = FrameStreamer(args.server_url, args.camera_node_id, args.api_key)
-        print(f"Streaming live frames to {args.server_url} as camera node '{args.camera_node_id}'.")
+        streamer = FrameStreamer(args.server_url, args.camera_node_id, args.api_key, max_fps=args.stream_fps)
+        print(f"Streaming frames to {args.server_url} as '{args.camera_node_id}' at up to {args.stream_fps:g} fps.")
 
     print(f"Source opened at {width}x{height} on device: {pipeline.device}.")
     print(f"Counting line: {args.line_axis}={line_position:.0f}, entry direction: {args.line_direction}.")
@@ -345,8 +361,19 @@ def main() -> None:
             detections = pipeline.process_frame(frame)
             total_faces += len(detections)
 
-            bboxes = [det["bbox"] for det in detections]
-            track_ids = tracker.update(bboxes)
+            if tracker is None:
+                # ByteTrack reports a null id for a face it has seen but not yet
+                # confirmed as a track. Those are dropped rather than counted:
+                # everything downstream -- occupancy, dwell, the identity vote --
+                # is about people, and a detection the tracker will not vouch for
+                # is not yet a person.
+                confirmed = [det for det in detections if det["track_id"] is not None]
+                bboxes = [det["bbox"] for det in confirmed]
+                track_ids = [det["track_id"] for det in confirmed]
+                detections = confirmed
+            else:
+                bboxes = [det["bbox"] for det in detections]
+                track_ids = tracker.update(bboxes)
             timestamp = time.time()
             tracks = {track_id: bbox_centroid(bbox) for track_id, bbox in zip(track_ids, bboxes)}
             for track_id, event in counter.update(tracks, timestamp):

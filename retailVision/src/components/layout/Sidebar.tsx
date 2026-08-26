@@ -9,6 +9,7 @@ import { NavLink } from "react-router-dom";
 const NAV_ITEMS = [
   { to: "/", label: "Overview", hint: "Live view", end: true },
   { to: "/zones", label: "Zones", hint: "Per-area history" },
+  { to: "/cameras", label: "Cameras", hint: "What each node sees" },
   { to: "/detections", label: "Visits", hint: "One row per person" },
 ];
 

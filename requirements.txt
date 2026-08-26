@@ -20,3 +20,7 @@ requests
 # dependency even though its retinaface sub-dependency requires it.
 deepface
 tf-keras
+# websocket-client: used by frame_stream.py to hold one connection open to
+# the server for live preview frames, instead of paying an HTTP round-trip
+# per image. Sync client, which suits the pipeline's threaded model.
+websocket-client

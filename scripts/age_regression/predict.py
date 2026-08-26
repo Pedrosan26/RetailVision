@@ -3,7 +3,7 @@ predict.py
 
 Runs the trained age-regression model on a single face crop (a BGR numpy
 array, as returned by FaceDetector), for live/interactive use outside of
-the batch evaluate.py pipeline (e.g. live_demo.py).
+the batch evaluate.py pipeline.
 """
 
 import numpy as np
