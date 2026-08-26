@@ -111,3 +111,15 @@ export interface AggregateFilters {
   gender?: string[];
   emotion?: string[];
 }
+
+/**
+ * Every emotion label the pipeline can emit, in a fixed order.
+ *
+ * The classifier collapses angry/disgust/fear/sad into "negative", so this
+ * set is closed and known ahead of time. Charts colour by position in this
+ * list rather than by position in whatever subset a given time range
+ * happens to contain -- otherwise a quiet hour missing "surprise" would
+ * repaint every other series, and a reader who learned "neutral is green"
+ * would see it orange for no reason connected to the data.
+ */
+export const EMOTION_ORDER = ["happy", "neutral", "surprise", "negative"] as const;

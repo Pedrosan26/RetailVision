@@ -52,3 +52,9 @@ export function fetchVisits(filters: VisitFilters = {}): Promise<Visit[]> {
 export function fetchZoneGeometry(): Promise<ZoneGeometry[]> {
   return apiGet<ZoneGeometry[]>("/api/v1/zones/geometry");
 }
+
+/** Fetches the camera node ids currently streaming live frames. */
+export async function fetchLiveCameras(): Promise<string[]> {
+  const body = await apiGet<{ cameras: string[] }>("/api/v1/frames/cameras");
+  return body.cameras;
+}

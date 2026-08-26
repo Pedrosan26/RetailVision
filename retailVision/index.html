@@ -4,7 +4,12 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>retailvision</title>
+    <!-- Matches --app-page in each mode, so the browser chrome meets the page
+         edge instead of drawing a light bar above a dark document. -->
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f7f6f4" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131211" />
+    <meta name="description" content="Live occupancy, zone engagement and visit analytics from retail camera nodes." />
+    <title>RetailVision</title>
   </head>
   <body>
     <div id="root"></div>

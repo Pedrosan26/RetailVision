@@ -1,14 +1,19 @@
 """
 tracking.py
 
-Lightweight multi-object tracking for the people counter: assigns a stable
-track ID to each detected face across frames using centroid distance,
-matched optimally per frame with the Hungarian algorithm. This is
-deliberately simpler than a full tracker like ByteTrack (no motion model,
-no re-identification after a long occlusion) -- centroid tracking is
-sufficient for a single virtual-line crossing counter; ByteTrack is
-deliberate future work for when multi-zone
-polygon tracking is actually needed.
+Lightweight multi-object tracking: assigns a stable track ID to each
+detected face across frames using centroid distance, matched optimally
+per frame with the Hungarian algorithm.
+
+This is the fallback, selected with --tracker centroid. The default is
+ByteTrack, which runs inside the detector (see detection.py) where the
+per-detection confidence scores are still available -- this tracker only
+ever sees boxes, so it cannot tell a confident face from a marginal one
+and must treat both the same.
+
+Kept rather than deleted because it is the honest baseline. It has no
+motion model and no way back after an occlusion, so the two together
+measure what those are worth on real footage instead of assuming it.
 """
 
 import numpy as np

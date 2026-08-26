@@ -22,9 +22,9 @@ app.add_middleware(
 
 app.include_router(ingest.router)
 app.include_router(detections.router)
+app.include_router(frames.router)
 app.include_router(occupancy.router)
 app.include_router(aggregates.router)
-app.include_router(frames.router)
 app.include_router(summary.router)
 app.include_router(visits.router)
 app.include_router(zone_geometry.router)

@@ -15,7 +15,7 @@
 // emotion from the list and strand the reader with no way back.
 
 import { useMemo, useState } from "react";
-import type { AggregateBucket } from "../../api/types";
+import { type AggregateBucket, EMOTION_ORDER } from "../../api/types";
 import { useAggregates } from "../../hooks/useAggregates";
 import { ErrorState } from "../common/ErrorState";
 import { LoadingState } from "../common/LoadingState";
@@ -307,6 +307,7 @@ export function HistoricalCharts({ zoneId }: { zoneId?: string } = {}) {
                 name,
                 values: data.map((bucket) => bucket.emotion_distribution[name] ?? 0),
               }))}
+              categoryOrder={EMOTION_ORDER}
               spanHours={range.hours}
               bucketHours={grain.hours}
               details={emotionDetails}
@@ -318,13 +319,19 @@ export function HistoricalCharts({ zoneId }: { zoneId?: string } = {}) {
           <Card>
             <CardHeader title="Age group" />
             <div className="p-4">
-              <DistributionBars distribution={totalDistribution(data.map((b) => b.age_group_distribution))} />
+              <DistributionBars
+                caption="Detections by age group"
+                distribution={totalDistribution(data.map((b) => b.age_group_distribution))}
+              />
             </div>
           </Card>
           <Card>
             <CardHeader title="Gender" />
             <div className="p-4">
-              <DistributionBars distribution={totalDistribution(data.map((b) => b.gender_distribution))} />
+              <DistributionBars
+                caption="Detections by gender"
+                distribution={totalDistribution(data.map((b) => b.gender_distribution))}
+              />
             </div>
           </Card>
         </div>

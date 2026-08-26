@@ -1,0 +1,38 @@
+# ByteTrack settings for face tracking in this pipeline.
+#
+# Only the two values that matter for faces are changed from Ultralytics'
+# defaults; the rest are left alone deliberately, so this file reads as a
+# short list of decisions rather than a copy of the defaults.
+#
+# ByteTrack's contribution over the centroid tracker it replaces is its
+# two-stage association: high-confidence detections are matched first,
+# then the leftovers are matched against low-confidence detections rather
+# than discarding them. A face that goes briefly blurry or half-turned
+# drops in confidence long before it disappears, and that second stage is
+# what keeps it on the same track instead of ending one and starting
+# another.
+
+tracker_type: bytetrack
+
+track_high_thresh: 0.25
+track_low_thresh: 0.1
+
+# Raised from 0.25. A low bar starts a track from any weak blob, and a
+# spurious track is not a harmless extra box: it counts as a person, gets
+# its own dwell timer, and casts its own age/gender vote. This pipeline
+# has produced hundreds of phantom people from a matcher that was too
+# permissive, and the cost of the mistake falls on exactly the numbers the
+# dashboard reports.
+new_track_thresh: 0.5
+
+# Raised from 30. The unit is frames, and this pipeline sustains roughly
+# 14 fps, so the default holds a lost track for about two seconds. Someone
+# turning their head away from the camera loses face detection for longer
+# than that, and if the track ends there they return as a new person with
+# a fresh dwell timer and a fresh identity vote. Three seconds covers the
+# ordinary head-turn without holding tracks so long that two people
+# crossing paths swap identities.
+track_buffer: 45
+
+match_thresh: 0.8
+fuse_score: True

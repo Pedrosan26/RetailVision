@@ -2,7 +2,7 @@
 generate_chessboard.py
 
 One-off generator for the printable chessboard that camera calibration
-needs (see scripts/calibrate_camera.py). Sized by inner-corner count, the
+needs (see scripts/setup/calibrate_camera.py). Sized by inner-corner count, the
 same way OpenCV and calibrate_camera.py's --pattern argument describe a
 board: a 9x6 board has 9 by 6 interior corners, so 10 by 7 squares.
 
@@ -16,7 +16,7 @@ solving for lens distortion, a bowed board is indistinguishable from a
 distorted lens and quietly corrupts the result. Flatness matters much more
 than the printed square size, which does not affect the lens model at all.
 
-Usage: PYTHONPATH=. ./venv/bin/python3 scripts/generate_chessboard.py --out calibration/chessboard.png
+Usage: PYTHONPATH=. ./venv/bin/python3 scripts/setup/generate_chessboard.py --out calibration/chessboard.png
 """
 
 import argparse

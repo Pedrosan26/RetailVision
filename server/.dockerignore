@@ -1,0 +1,14 @@
+# Local virtualenv -- the image builds its own from requirements.txt.
+venv/
+__pycache__/
+*.py[cod]
+
+# Never bake local secrets or host-specific config into the image. The
+# compose file supplies DATABASE_URL and the API keys as environment
+# variables, and a copied .env would shadow them (pydantic-settings reads
+# the file when the variable is unset).
+.env
+
+# Test-only; not needed at runtime.
+tests/
+.pytest_cache/

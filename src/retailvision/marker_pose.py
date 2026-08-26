@@ -29,7 +29,7 @@ import numpy as np
 
 from .calibration import CameraCalibration
 
-# DICT_4X4_50 matches scripts/generate_aruco_markers.py: a small, sparse pattern
+# DICT_4X4_50 matches scripts/setup/generate_aruco_markers.py: a small, sparse pattern
 # that stays detectable further from the camera than a denser dictionary would.
 DEFAULT_DICTIONARY = cv2.aruco.DICT_4X4_50
 
