@@ -28,6 +28,7 @@ import torch
 from ultralytics import YOLO
 
 from .detection import FaceDetector
+from .person_detection import PersonDetector, face_owner, floor_pixel
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -52,17 +53,25 @@ def resolve_device() -> str:
 class InferencePipeline:
     """Detects faces and classifies age group, gender, and emotion per frame."""
 
-    def __init__(self, device: str | None = None, track: bool = False) -> None:
-        """Load the face detector and all three fine-tuned classifiers once.
+    def __init__(self, device: str | None = None, track: bool = False, bodies: bool = False) -> None:
+        """Load the face detector, the classifiers, and optionally the person detector.
 
-        With track=True the detector associates faces across frames itself
-        (ByteTrack) and every detection carries a track_id. With track=False
-        it detects each frame independently and track_id is always None,
-        leaving identity to whatever the caller wires up.
+        With track=True faces are associated across frames by the detector
+        itself (ByteTrack) and every detection carries a track_id. With
+        track=False each frame is detected independently and track_id is
+        None, leaving identity to whatever the caller wires up.
+
+        With bodies=True a person detector runs alongside, and identity
+        moves from the face to the body: each detection reports the track
+        of the person it belongs to, plus the pixel where that person meets
+        the floor. A body is visible from any angle where a face is not, so
+        the track survives a head turn, and its feet give a floor position
+        that needs no assumed head height.
         """
         self.track = track
         self.device = device or resolve_device()
         self.detector = FaceDetector(device=self.device)
+        self.people = PersonDetector(device=self.device) if bodies else None
         self.models: dict[str, YOLO] = {task: YOLO(str(path)) for task, path in WEIGHTS.items()}
 
     def _classify(self, task: str, crop: np.ndarray) -> tuple[str, float]:
@@ -91,13 +100,35 @@ class InferencePipeline:
         track=True, and None otherwise. A track_id of None while tracking is
         on means ByteTrack has seen the face but not yet confirmed it as a
         track.
+
+        With bodies enabled, track_id is the *person's* track rather than
+        the face's, and two more keys appear: body_bbox, and floor_pixel --
+        the point where that person meets the floor, or None when their
+        feet are out of shot. A face inside no detected body keeps its own
+        face track, so a detection is never dropped for want of a body.
         """
         detections = []
         found = self.detector.track(frame) if self.track else [(box, None) for box in self.detector.detect(frame)]
+
+        people = self.people.track(frame) if self.people is not None else []
+        frame_height = frame.shape[0]
+        bodies = {track_id: box for box, track_id in people if track_id is not None}
+
         for (x, y, w, h), track_id in found:
             crop = frame[y : y + h, x : x + w]
             if crop.size == 0:
                 continue
+
+            # Identity moves to the body where one contains this face; a face
+            # in no body keeps its own track rather than being discarded.
+            body_bbox = None
+            contact = None
+            if people:
+                owner = face_owner((x, y, w, h), people)
+                if owner is not None:
+                    track_id = owner
+                    body_bbox = bodies[owner]
+                    contact = floor_pixel(body_bbox, frame_height)
 
             age_group, age_conf = self._classify("age", crop)
             gender, gender_conf = self._classify("gender", crop)
@@ -106,6 +137,8 @@ class InferencePipeline:
             detections.append(
                 {
                     "bbox": (x, y, w, h),
+                    "body_bbox": body_bbox,
+                    "floor_pixel": contact,
                     "track_id": track_id,
                     "age_group": age_group,
                     "gender": gender,
