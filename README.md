@@ -1,5 +1,7 @@
 # RetailVision
 
+[![CI](https://github.com/Pedrosan26/RetailVision/actions/workflows/ci.yml/badge.svg)](https://github.com/Pedrosan26/RetailVision/actions/workflows/ci.yml)
+
 Real-time computer vision system that turns retail camera feeds into
 anonymized occupancy and demographic analytics — measuring **how many
 people are in a space, where they are standing, how long they stay, and
@@ -283,8 +285,13 @@ cd retailVision && npm run build && npm run lint                   # dashboard
 ```
 
 Server tests run against in-memory SQLite, which exercises the
-application and ORM logic; TimescaleDB-specific DDL is covered only by
-applying the migrations for real.
+application and ORM logic.
+
+All three run on every push and pull request, alongside a fourth job that
+builds the Docker images, brings the stack up on an empty volume and
+checks the hypertable exists afterwards — which is the only place the
+TimescaleDB-specific DDL actually executes, and the only way the claim
+that `docker compose up` runs the system stays true.
 
 ---
 
