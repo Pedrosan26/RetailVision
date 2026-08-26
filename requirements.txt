@@ -24,3 +24,10 @@ tf-keras
 # the server for live preview frames, instead of paying an HTTP round-trip
 # per image. Sync client, which suits the pipeline's threaded model.
 websocket-client
+
+# onnxruntime: runs the person re-identification encoder in appearance.py,
+# which Ultralytics publishes as ONNX rather than as a torch checkpoint.
+# Ultralytics installs this on demand at first use; listing it explicitly
+# means a fresh environment has it before the pipeline needs it, instead of
+# pausing mid-run to fetch it.
+onnxruntime
