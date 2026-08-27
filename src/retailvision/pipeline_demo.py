@@ -261,7 +261,26 @@ def draw_detections(
     for det, zone_id, position in zip(detections, zone_ids, world_positions):
         x, y, w, h = det["bbox"]
         conf = det["confidence"]
-        cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+
+        # The body is what this person is, so it gets the solid box; the face
+        # is drawn inside it, thinner, as the part the demographics came from.
+        # Drawing only the face made the overlay look like a face tracker even
+        # when identity and position were both coming from the body.
+        body = det.get("body_bbox")
+        if body is not None:
+            bx, by, bw, bh = body
+            cv2.rectangle(frame, (bx, by), (bx + bw, by + bh), (0, 255, 0), 2)
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 200, 120), 1)
+            # Mark where the feet were taken to meet the floor, since that
+            # point is what every position downstream is derived from.
+            contact = det.get("floor_pixel")
+            if contact is not None:
+                cv2.drawMarker(
+                    frame, (int(contact[0]), int(contact[1])), (0, 255, 255), cv2.MARKER_CROSS, 18, 2
+                )
+            x, y, w, h = body
+        else:
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
         line1 = f"{det['age_group']} ({conf['age']:.2f}) / {det['gender']} ({conf['gender']:.2f})"
         line2 = f"{det['emotion']} ({conf['emotion']:.2f})"
         cv2.putText(frame, line1, (x, y - 26), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)

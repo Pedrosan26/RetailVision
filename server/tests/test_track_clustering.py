@@ -168,10 +168,32 @@ class AppearanceClusterTests(unittest.TestCase):
         )
         self.assertEqual(len(set(clusters.values())), 2)
 
-    def test_appearance_never_merges_tracks_from_one_camera(self):
-        """One camera reporting two tracks is reporting two people, however alike they look."""
+    def test_one_camera_seeing_two_tracks_at_once_keeps_them_apart(self):
+        """A camera cannot see one person twice simultaneously, so this is two people.
+
+        However alike they look: two colleagues in the same uniform standing
+        together must not collapse into one, or every group undercounts.
+        """
+        a, b = walk("cam-a", "1", 0, 10, 0.0, 0.0), walk("cam-a", "2", 0, 10, 4.0, 0.0)
+        clusters = cluster_tracks([a, b], appearances={a.key: self.SAME, b.key: self.ALSO_SAME})
+        self.assertEqual(len(set(clusters.values())), 2)
+
+    def test_one_camera_can_relink_someone_who_left_and_came_back(self):
+        """Walking out of a camera's view and back in is one visit, not two.
+
+        Two tracks on one camera that never overlap cannot be two people
+        seen at once -- they are a person who was away in between, which is
+        precisely what appearance exists to recognise. Refusing to consider
+        this pair was why a returning visitor was counted twice.
+        """
         a, b = walk("cam-a", "1", 0, 10, 0.0, 0.0), walk("cam-a", "2", 600, 10, 0.0, 0.0)
         clusters = cluster_tracks([a, b], appearances={a.key: self.SAME, b.key: self.ALSO_SAME})
+        self.assertEqual(len(set(clusters.values())), 1)
+
+    def test_a_different_person_arriving_later_is_not_relinked(self):
+        """Someone else walking into the same spot later stays a separate person."""
+        a, b = walk("cam-a", "1", 0, 10, 0.0, 0.0), walk("cam-a", "2", 600, 10, 0.0, 0.0)
+        clusters = cluster_tracks([a, b], appearances={a.key: self.SAME, b.key: self.DIFFERENT})
         self.assertEqual(len(set(clusters.values())), 2)
 
     def test_missing_appearances_fall_back_to_geometry_alone(self):

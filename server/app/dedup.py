@@ -320,14 +320,24 @@ def cluster_tracks(
 
     for index, left in enumerate(paths):
         for right in paths[index + 1 :]:
-            if left.key.camera_node_id == right.key.camera_node_id:
-                continue
             if _overlaps(left, right, min_overlap):
-                # Seen together: position decides, either way. A disagreement
-                # here is two people, and appearance does not get a vote.
+                # One camera reporting two tracks at the same moment is
+                # reporting two people -- it cannot see anyone twice at once --
+                # so this pair is settled without looking further. Collapsing
+                # it would undercount a queue or a group.
+                if left.key.camera_node_id == right.key.camera_node_id:
+                    continue
+                # Seen together by two cameras: position decides, either way.
+                # A disagreement here is two people, and appearance gets no vote.
                 if same_person(left, right, merge_radius, min_overlap, tolerance):
                     union(left.key, right.key)
             elif appearances and looks_like(left.key, right.key, appearances, appearance_threshold):
+                # No shared moment, so position has nothing to say and
+                # appearance is the only evidence. This holds whether or not
+                # the two tracks came from the same camera: someone who walks
+                # out of one camera's view and back into it is exactly this
+                # case, and refusing to consider it was why a person leaving
+                # and returning was counted twice.
                 union(left.key, right.key)
 
     return {path.key: f"{find(path.key).camera_node_id}:{find(path.key).track_id}" for path in paths}

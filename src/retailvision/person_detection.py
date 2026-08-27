@@ -44,16 +44,24 @@ Bbox = tuple[int, int, int, int]
 class PersonDetector:
     """Detects people in a frame and follows them across frames with ByteTrack."""
 
-    def __init__(self, device: str | None = None, confidence: float = 0.4) -> None:
+    def __init__(self, device: str | None = None, confidence: float = 0.4, min_height_fraction: float = 0.15) -> None:
         """Load the COCO detector and fix the confidence floor for a person detection.
 
         The floor is above the Ultralytics default: a spurious person is not
         a harmless extra box here, it becomes a track, a dwell timer and a
         row of analytics.
+
+        min_height_fraction discards boxes too short to be a person at the
+        distances these cameras cover. On a ceiling-mounted view of a room,
+        someone 2-5m away fills a large part of the frame vertically; a
+        detection a tenth of the frame tall is a reflection, a poster or a
+        corner artefact, and it was producing exactly those. Expressed as a
+        fraction so it means the same thing at any capture resolution.
         """
         self._model = YOLO(str(WEIGHTS_PATH))
         self._device = device
         self._confidence = confidence
+        self._min_height_fraction = min_height_fraction
 
     def track(self, frame: np.ndarray) -> list[tuple[Bbox, int | None]]:
         """Return each detected person as (box, track_id), with track_id None until confirmed.
@@ -73,9 +81,13 @@ class PersonDetector:
         boxes = [
             (int(x1), int(y1), int(x2 - x1), int(y2 - y1)) for x1, y1, x2, y2 in result.boxes.xyxy.tolist()
         ]
-        if result.boxes.id is None:
-            return [(box, None) for box in boxes]
-        return list(zip(boxes, (int(track_id) for track_id in result.boxes.id.tolist())))
+        ids = (
+            [None] * len(boxes)
+            if result.boxes.id is None
+            else [int(track_id) for track_id in result.boxes.id.tolist()]
+        )
+        floor = self._min_height_fraction * frame.shape[0]
+        return [(box, track_id) for box, track_id in zip(boxes, ids) if box[3] >= floor]
 
 
 # How close a box's bottom edge may come to the bottom of the frame before

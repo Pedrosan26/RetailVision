@@ -108,13 +108,19 @@ class InferencePipeline:
         face track, so a detection is never dropped for want of a body.
         """
         detections = []
-        found = self.detector.track(frame) if self.track else [(box, None) for box in self.detector.detect(frame)]
+        found = (
+            self.detector.track(frame)
+            if self.track
+            else [(box, None, 1.0) for box in self.detector.detect(frame)]
+        )
 
         people = self.people.track(frame) if self.people is not None else []
         frame_height = frame.shape[0]
         bodies = {track_id: box for box, track_id in people if track_id is not None}
+        if people:
+            found = _one_face_per_body(found, people)
 
-        for (x, y, w, h), track_id in found:
+        for (x, y, w, h), track_id, _confidence in found:
             crop = frame[y : y + h, x : x + w]
             if crop.size == 0:
                 continue
@@ -151,3 +157,45 @@ class InferencePipeline:
                 }
             )
         return detections
+
+
+def _one_face_per_body(
+    faces: list[tuple[tuple[int, int, int, int], int | None, float]],
+    people: list[tuple[tuple[int, int, int, int], int | None]],
+) -> list[tuple[tuple[int, int, int, int], int | None, float]]:
+    """Keep at most one face per detected body, the most confident one.
+
+    A person has one face. The detector does not know that, and on some
+    views it reliably finds two -- on footage of a single person looking
+    down it returns exactly two faces per frame, at full confidence, one of
+    them the back of their head. Raising the confidence floor does not
+    touch that, because the spurious detection is confident; the only thing
+    that separates the two is knowing they belong to the same person, which
+    is what the body detection supplies.
+
+    Everything downstream inherits the benefit: a false face otherwise
+    becomes a track, a dwell timer, and an age, gender and emotion reading,
+    because the classifiers cannot reject their input -- hand one the back
+    of a head and it will report a mood.
+
+    A face inside no detected body is discarded, because a face without a
+    person attached to it is not a face. That was measured rather than
+    assumed: across the single-person evaluation clips every genuine face
+    fell inside a body (379/379 and 43/43 on two of them), while the
+    orphans were the false positives -- on the looking-down clip, exactly
+    one per frame, a fixed artefact elsewhere in the room that the
+    detector reported at 0.75 confidence in every single frame.
+
+    The cost is a real person whose body the detector missed. That is the
+    right trade here: the person detector is reliable on whole people at
+    these distances, and a phantom visitor with an age, a mood and a dwell
+    time corrupts the analytics in a way a briefly missed one does not.
+    """
+    best: dict[int, tuple[tuple[int, int, int, int], int | None, float]] = {}
+    for face in faces:
+        owner = face_owner(face[0], people)
+        if owner is None:
+            continue
+        if owner not in best or face[2] > best[owner][2]:
+            best[owner] = face
+    return list(best.values())
