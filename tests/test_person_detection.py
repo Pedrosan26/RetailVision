@@ -71,3 +71,51 @@ class FaceOwnerTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OverlappingPeopleTests(unittest.TestCase):
+    """Somebody standing behind somebody else must not be absorbed into them.
+
+    This is a regression guard. A filter that discarded short person boxes
+    -- added to remove a reflection -- also discarded anyone partly hidden,
+    because an occluded person is detected as head and shoulders. With
+    their own body gone, their face fell inside the nearer person's box
+    instead, and the one-face-per-body rule then deduplicated them away.
+    The person behind disappeared entirely.
+    """
+
+    NEAR = (400, 200, 500, 800)
+    BEHIND = (750, 260, 300, 140)
+    FACE_NEAR = (560, 260, 180, 200)
+    FACE_BEHIND = (830, 300, 120, 130)
+
+    def test_each_face_belongs_to_its_own_person(self):
+        """With both bodies present, neither face is attributed to the other person."""
+        people = [(self.NEAR, 1), (self.BEHIND, 2)]
+        self.assertEqual(face_owner(self.FACE_NEAR, people), 1)
+        self.assertEqual(face_owner(self.FACE_BEHIND, people), 2)
+
+    def test_a_partly_hidden_person_is_not_absorbed_into_the_nearer_one(self):
+        """The occluded person's face resolves to them, not to whoever is in front.
+
+        Their box is short -- head and shoulders only -- and their face
+        centre also falls inside the nearer person's much larger box. The
+        smaller box has to win, or the two become one.
+        """
+        people = [(self.NEAR, 1), (self.BEHIND, 2)]
+        near_box = self.NEAR
+        self.assertTrue(
+            near_box[0] <= self.FACE_BEHIND[0] + self.FACE_BEHIND[2] / 2 <= near_box[0] + near_box[2],
+            "the test is meaningless unless the behind face really does sit inside the near body",
+        )
+        self.assertEqual(face_owner(self.FACE_BEHIND, people), 2)
+
+    def test_a_short_body_is_still_reported(self):
+        """An occluded person's box must survive detection to own their face at all.
+
+        Guards the filter that used to drop it: at 140 pixels in a 1080-tall
+        frame it was under the old floor, and losing it was what made the
+        person behind vanish.
+        """
+        self.assertLess(self.BEHIND[3], 0.15 * 1080)
+        self.assertEqual(face_owner(self.FACE_BEHIND, [(self.NEAR, 1), (self.BEHIND, 2)]), 2)
