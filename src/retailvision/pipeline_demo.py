@@ -149,6 +149,14 @@ def parse_args() -> argparse.Namespace:
         "with an expiry -- the only data this system holds that is derived from how someone looks.",
     )
     parser.add_argument(
+        "--record",
+        type=Path,
+        default=None,
+        help="Also write the raw camera frames to this video file. Recorded before any overlay is "
+        "drawn, so the result can be replayed through the pipeline as a fixed input -- which is the "
+        "only way to tune a threshold or compare two trackers reproducibly.",
+    )
+    parser.add_argument(
         "--stream-frames",
         action="store_true",
         help="Also stream the annotated frame to the server for live viewing in the dashboard. "
@@ -363,6 +371,16 @@ def main() -> None:
         streamer = FrameStreamer(args.server_url, args.camera_node_id, args.api_key, max_fps=args.stream_fps)
         print(f"Streaming frames to {args.server_url} as '{args.camera_node_id}' at up to {args.stream_fps:g} fps.")
 
+    recorder = None
+    if args.record:
+        args.record.parent.mkdir(parents=True, exist_ok=True)
+        # mp4v rather than a modern codec: it is the one OpenCV writes without
+        # extra system libraries on every platform this runs on.
+        recorder = cv2.VideoWriter(str(args.record), cv2.VideoWriter_fourcc(*"mp4v"), 15.0, (width, height))
+        if not recorder.isOpened():
+            raise RuntimeError(f"Could not open {args.record} for writing")
+        print(f"Recording raw frames to {args.record}.")
+
     print(f"Source opened at {width}x{height} on device: {pipeline.device}.")
     print(f"Counting line: {args.line_axis}={line_position:.0f}, entry direction: {args.line_direction}.")
     if args.benchmark:
@@ -383,6 +401,12 @@ def main() -> None:
             if not ok:
                 break
             frame_count += 1
+
+            # Recorded before inference so the file holds what the camera saw,
+            # not what this run concluded -- a fixture is only useful as an
+            # input, and an overlay baked in would make it unreplayable.
+            if recorder is not None:
+                recorder.write(frame)
 
             detections = pipeline.process_frame(frame)
             total_faces += len(detections)
@@ -524,6 +548,8 @@ def main() -> None:
             shipper.close()
         if streamer is not None:
             streamer.close()
+        if recorder is not None:
+            recorder.release()
         if frame_count:
             avg_faces = total_faces / frame_count
             print(

@@ -206,32 +206,53 @@ Page sections are reorderable and the arrangement persists per browser.
 
 ## Privacy design
 
-The constraint is that **the analytics pipeline moves no pixels**. What
-leaves a camera node as data is labels, counts and coordinates — nothing
-from which a face could be reconstructed or matched:
+Three channels leave a camera node, and they are deliberately separate so
+each can be reasoned about — and switched off — on its own.
 
-- Inference is local; the record stream carries only labels, counts and
-  floor coordinates
-- Log records carry no bounding boxes, crops, or face embeddings
-- `track_id` groups one person's records **within one camera and one
-  process run**. It is random, survives no restart, and is not comparable
-  between cameras — enough to count someone once, useless for following
-  them
-- Recognising the same person across cameras is solved **spatially**,
-  from world position, never by appearance matching
+**The analytics stream carries no pixels.** Inference runs locally and
+what is transmitted is labels, counts and floor coordinates. Records
+carry no image data, no bounding boxes and no crops, and the local NDJSON
+log holds nothing else either. This is on by default and is the whole
+system for a deployment that only needs counts, dwell and demographics.
 
-Re-identification across visits is deliberately not implemented. It
-would make several metrics better and is the one capability this
-architecture rules out on purpose.
+**Appearance descriptions are opt-in, and are the one thing here derived
+from how somebody looks.** `--reid` sends a vector per track so the
+server can recognise one person on two cameras that never saw them at the
+same moment — the case position provably cannot cover, because there is
+no shared instant to compare. Being explicit about what that is:
 
-**Live view is the exception, and it is deliberately a separate channel.**
-`--stream-frames` opens a WebSocket that sends the annotated preview to
-the server so an operator can see what a camera is actually pointed at.
-It is off unless asked for, the frames are held in the server's memory
-and never written to disk or the database, and they are not part of the
-record stream above — the analytics data is identical whether streaming
-is on or off. A deployment that does not need to check camera aim should
-leave it off, and nothing else stops working.
+- It describes **clothing, build and colouring**, not a face. Change a
+  jacket and you are a new person to it, which bounds what it can do
+  (continuity within a visit, not recognition of a returning customer)
+  and bounds the harm in the same stroke.
+- It is a **biometric template** under GDPR Article 9 and laws like
+  Illinois BIPA, whatever it describes. Treating it as ordinary telemetry
+  because it is only clothing would be wrong.
+- It is stored **one row per track**, pruned after 30 days by the ingest
+  path itself, so retention holds without any separate process running.
+  See `APPEARANCE_RETENTION` in `server/app/routers/ingest.py`.
+- Without `--reid` no vector is ever computed or sent, and every other
+  number the system produces is unchanged.
+
+**Live view is opt-in and holds nothing.** `--stream-frames` opens a
+WebSocket carrying the annotated preview so an operator can check what a
+camera is pointed at. Frames live in the server's memory, are never
+written to disk or the database, and are not part of the record stream.
+
+### What identity means here
+
+`track_id` is random per track and per process run, and is not
+comparable between camera nodes. Linking across cameras happens on the
+server, from two kinds of evidence used in a fixed order: **world
+position** for tracks that were visible to two cameras at once, and
+**appearance** only for tracks with no shared moment. Appearance never
+overrides a position disagreement — two people in similar coats standing
+apart stay two people.
+
+Nothing is linked across visits. There is no durable identifier: a
+visitor tomorrow is a new person, by construction rather than by policy,
+because a clothing-based vector cannot survive a change of clothes and
+nothing else is retained.
 
 ---
 
@@ -240,6 +261,8 @@ leave it off, and nothing else stops working.
 ```
 src/retailvision/      camera node pipeline
   detection.py           YOLOv8 face detector, with ByteTrack association (default)
+  person_detection.py    body detector; identity anchor and floor position
+  appearance.py          per-track appearance vector, for cross-camera linking
   inference.py           detector + age/gender/emotion classifiers, one call per frame
   tracking.py            centroid tracker, Hungarian matching (--tracker centroid)
   person_track.py        per-person identity voting and change-based emission
@@ -257,7 +280,7 @@ server/app/            FastAPI service
   routers/               ingest, detections, occupancy, aggregates, summary, visits,
                          zone geometry, frames (live preview WebSockets)
   models/, schemas/      SQLAlchemy ORM and Pydantic models
-  dedup.py               cross-camera spatial deduplication
+  dedup.py               cross-camera deduplication and track-to-person clustering
 migrations/            Alembic
 
 retailVision/src/      React dashboard
