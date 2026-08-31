@@ -44,6 +44,8 @@ class RemoteLogShipper:
         self._flush_interval = flush_interval
         self._request_timeout = request_timeout
         self._buffer: list[dict] = []
+        # What each live track currently looks like; see set_appearances().
+        self._appearances: dict[str, list[float]] = {}
         self._last_flush = time.monotonic()
         self._executor = ThreadPoolExecutor(max_workers=1)
 
@@ -104,9 +106,23 @@ class RemoteLogShipper:
         self._last_flush = time.monotonic()
         self._executor.submit(self._send, batch)
 
+    def set_appearances(self, appearances: dict[str, list[float]]) -> None:
+        """Record what each live track currently looks like, to accompany the next batch.
+
+        Held rather than queued: a track's appearance is a running mean that
+        keeps changing, so what the server wants is the current value at send
+        time, not every intermediate one. Overwriting is therefore correct
+        and keeps this to a dictionary assignment on the capture thread.
+        """
+        self._appearances = dict(appearances)
+
     def _send(self, batch: list[dict]) -> None:
         """POST one batch of records to the server; warn and drop the batch on any failure, without retrying."""
         payload = {"camera_node_id": self._camera_node_id, "records": batch}
+        if self._appearances:
+            payload["appearances"] = [
+                {"track_id": track_id, "embedding": embedding} for track_id, embedding in self._appearances.items()
+            ]
         headers = {"X-API-Key": self._api_key}
         try:
             response = requests.post(self._ingest_url, json=payload, headers=headers, timeout=self._request_timeout)

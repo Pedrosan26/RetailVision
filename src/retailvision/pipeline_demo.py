@@ -34,6 +34,7 @@ from pathlib import Path
 import cv2
 
 from .counter import LineCounter
+from .appearance import AppearanceEmbedder, TrackAppearance
 from .calibration import CameraCalibration
 from .frame_stream import FrameStreamer
 from .marker_map import DEFAULT_HEAD_HEIGHT_METERS, FLOOR_MOUNTING, WALL_MOUNTING, MarkerMap
@@ -134,6 +135,28 @@ def parse_args() -> argparse.Namespace:
         "confidence-aware tracker, 'centroid' the simpler nearest-centroid matcher (default: bytetrack)",
     )
     parser.add_argument(
+        "--bodies",
+        action="store_true",
+        help="Detect whole people alongside faces and identify by the body rather than the face. "
+        "A body stays visible when a face turns away, so one person is one track instead of one per "
+        "head turn, and their feet give a floor position that needs no assumed head height.",
+    )
+    parser.add_argument(
+        "--reid",
+        action="store_true",
+        help="Describe each person's appearance so the server can recognise them across cameras. "
+        "Requires --bodies. Sends an appearance vector per track to the server, where it is stored "
+        "with an expiry -- the only data this system holds that is derived from how someone looks.",
+    )
+    parser.add_argument(
+        "--record",
+        type=Path,
+        default=None,
+        help="Also write the raw camera frames to this video file. Recorded before any overlay is "
+        "drawn, so the result can be replayed through the pipeline as a fixed input -- which is the "
+        "only way to tune a threshold or compare two trackers reproducibly.",
+    )
+    parser.add_argument(
         "--stream-frames",
         action="store_true",
         help="Also stream the annotated frame to the server for live viewing in the dashboard. "
@@ -148,6 +171,10 @@ def parse_args() -> argparse.Namespace:
     args = parser.parse_args()
     if args.stream_frames and not args.server_url:
         parser.error("--stream-frames requires --server-url")
+    if args.reid and not args.bodies:
+        parser.error("--reid requires --bodies: appearance is described from the body crop")
+    if args.reid and not args.server_url:
+        parser.error("--reid requires --server-url: appearances are only useful to the server that merges them")
     if args.server_url and not (args.camera_node_id and args.api_key):
         parser.error("--server-url requires both --camera-node-id and --api-key")
     if args.zones and not args.calibration:
@@ -234,7 +261,26 @@ def draw_detections(
     for det, zone_id, position in zip(detections, zone_ids, world_positions):
         x, y, w, h = det["bbox"]
         conf = det["confidence"]
-        cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+
+        # The body is what this person is, so it gets the solid box; the face
+        # is drawn inside it, thinner, as the part the demographics came from.
+        # Drawing only the face made the overlay look like a face tracker even
+        # when identity and position were both coming from the body.
+        body = det.get("body_bbox")
+        if body is not None:
+            bx, by, bw, bh = body
+            cv2.rectangle(frame, (bx, by), (bx + bw, by + bh), (0, 255, 0), 2)
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 200, 120), 1)
+            # Mark where the feet were taken to meet the floor, since that
+            # point is what every position downstream is derived from.
+            contact = det.get("floor_pixel")
+            if contact is not None:
+                cv2.drawMarker(
+                    frame, (int(contact[0]), int(contact[1])), (0, 255, 255), cv2.MARKER_CROSS, 18, 2
+                )
+            x, y, w, h = body
+        else:
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
         line1 = f"{det['age_group']} ({conf['age']:.2f}) / {det['gender']} ({conf['gender']:.2f})"
         line2 = f"{det['emotion']} ({conf['emotion']:.2f})"
         cv2.putText(frame, line1, (x, y - 26), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
@@ -283,7 +329,14 @@ def main() -> None:
         line_position = width / 2 if args.line_axis == "x" else height / 2
 
     use_bytetrack = args.tracker == "bytetrack"
-    pipeline = InferencePipeline(track=use_bytetrack)
+    pipeline = InferencePipeline(track=use_bytetrack, bodies=args.bodies)
+    if args.bodies:
+        print("Body detection enabled: identity follows the person, positions come from their feet.")
+
+    embedder = AppearanceEmbedder(device=pipeline.device) if args.reid else None
+    appearance = TrackAppearance() if args.reid else None
+    if args.reid:
+        print("Appearance descriptions enabled: shipped per track, stored server-side with an expiry.")
     # Only built for --tracker centroid; ByteTrack assigns ids inside the
     # detector, where it can use the confidence scores this one never sees.
     #
@@ -337,6 +390,16 @@ def main() -> None:
         streamer = FrameStreamer(args.server_url, args.camera_node_id, args.api_key, max_fps=args.stream_fps)
         print(f"Streaming frames to {args.server_url} as '{args.camera_node_id}' at up to {args.stream_fps:g} fps.")
 
+    recorder = None
+    if args.record:
+        args.record.parent.mkdir(parents=True, exist_ok=True)
+        # mp4v rather than a modern codec: it is the one OpenCV writes without
+        # extra system libraries on every platform this runs on.
+        recorder = cv2.VideoWriter(str(args.record), cv2.VideoWriter_fourcc(*"mp4v"), 15.0, (width, height))
+        if not recorder.isOpened():
+            raise RuntimeError(f"Could not open {args.record} for writing")
+        print(f"Recording raw frames to {args.record}.")
+
     print(f"Source opened at {width}x{height} on device: {pipeline.device}.")
     print(f"Counting line: {args.line_axis}={line_position:.0f}, entry direction: {args.line_direction}.")
     if args.benchmark:
@@ -357,6 +420,12 @@ def main() -> None:
             if not ok:
                 break
             frame_count += 1
+
+            # Recorded before inference so the file holds what the camera saw,
+            # not what this run concluded -- a fixture is only useful as an
+            # input, and an overlay baked in would make it unreplayable.
+            if recorder is not None:
+                recorder.write(frame)
 
             detections = pipeline.process_frame(frame)
             total_faces += len(detections)
@@ -388,6 +457,31 @@ def main() -> None:
                 for track_id, det in zip(track_ids, detections)
             ]
 
+            # Describe how each person looks, so the server can recognise them
+            # on another camera when they were never visible to both at once --
+            # the case position alone provably cannot cover.
+            if appearance is not None:
+                described = [
+                    (track_id, person, det["body_bbox"])
+                    for track_id, person, det in zip(track_ids, people, detections)
+                    if det.get("body_bbox") is not None
+                ]
+                if described:
+                    vectors = embedder.embed_boxes(frame, [box for _, _, box in described])
+                    for (track_id, _, _), vector in zip(described, vectors):
+                        appearance.observe(track_id, vector)
+                appearance.retire(set(track_ids))
+                # Keyed by the anonymous per-track id the records carry, not by
+                # the tracker's own integer, which means nothing to the server.
+                if shipper is not None:
+                    shipper.set_appearances(
+                        {
+                            person.track_id: appearance.embedding(track_id).tolist()
+                            for track_id, person, _ in described
+                            if appearance.embedding(track_id) is not None
+                        }
+                    )
+
             # With zones configured, each detection carries the zone it is standing
             # in and that zone's live headcount, rather than the line counter's
             # running total -- a headcount cannot drift the way a net count can.
@@ -396,11 +490,25 @@ def main() -> None:
             world_positions: list[tuple[float, float] | None] = [None] * len(detections)
             if resolver is not None:
                 resolver.update(frame)
-                world_positions = [resolver.world_position(bbox) for bbox in bboxes]
-                # Membership tests the ray across the whole plausible band of
-                # face heights, so seated and standing people both land in the
-                # zone; the coordinate above stays committed to one plane.
-                zone_ids = [resolver.zone_for_bbox(bbox) for bbox in bboxes]
+                # Feet first where a body detection saw them. That ray meets the
+                # floor at a point with no assumed height in it, which is the
+                # single largest source of position error otherwise. Where the
+                # feet were cropped by the frame edge -- someone close to the
+                # camera -- there is nothing to project, so the face path takes
+                # over: less accurate, but a position rather than a gap.
+                floor_pixels = [det.get("floor_pixel") for det in detections]
+                world_positions = [
+                    resolver.floor_world_position(pixel) if pixel is not None else resolver.world_position(bbox)
+                    for pixel, bbox in zip(floor_pixels, bboxes)
+                ]
+                # Membership from the floor contact is a single point test. The
+                # face fallback instead samples the ray across the whole
+                # plausible band of face heights, so seated and standing people
+                # both land in the zone.
+                zone_ids = [
+                    resolver.zone_for_floor(pixel) if pixel is not None else resolver.zone_for_bbox(bbox)
+                    for pixel, bbox in zip(floor_pixels, bboxes)
+                ]
                 # Occupancy counts confirmed people, so a one-frame false
                 # positive never appears in a headcount it would inflate.
                 zone_counts = resolver.occupancy(
@@ -459,6 +567,8 @@ def main() -> None:
             shipper.close()
         if streamer is not None:
             streamer.close()
+        if recorder is not None:
+            recorder.release()
         if frame_count:
             avg_faces = total_faces / frame_count
             print(

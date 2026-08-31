@@ -21,11 +21,29 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
+from ..dedup import person_ids_in_thread
+from ..models.appearance import TrackAppearance
 from ..models.detection import DetectionEvent
 from ..schemas.detection import AggregateBucket
 from ..utils import as_utc
 
 router = APIRouter(prefix="/api/v1", tags=["aggregates"])
+
+
+async def load_appearances(db, events) -> dict[tuple[str, str], list[float]]:
+    """Fetch the stored appearance for every track appearing in these events."""
+    keys = {(e.camera_node_id, e.track_id) for e in events if e.track_id is not None}
+    if not keys:
+        return {}
+    nodes = {camera for camera, _ in keys}
+    rows = (
+        await db.execute(select(TrackAppearance).where(TrackAppearance.camera_node_id.in_(nodes)))
+    ).scalars().all()
+    return {
+        (row.camera_node_id, row.track_id): row.embedding
+        for row in rows
+        if (row.camera_node_id, row.track_id) in keys
+    }
 
 DEFAULT_LOOKBACK = timedelta(hours=24)
 WINDOW_UNITS = {"m": "minutes", "h": "hours", "d": "days"}
@@ -43,7 +61,12 @@ def parse_window(window: str) -> timedelta:
     return timedelta(**{WINDOW_UNITS[unit]: value})
 
 
-def bucket_events(events: list[DetectionEvent], since: datetime, window: timedelta) -> list[AggregateBucket]:
+def bucket_events(
+    events: list[DetectionEvent],
+    since: datetime,
+    window: timedelta,
+    person_ids: dict[tuple[str, str], str] | None = None,
+) -> list[AggregateBucket]:
     """Group events into fixed-size time buckets aligned to `since`, aggregating each bucket."""
     buckets: dict[int, list[DetectionEvent]] = {}
     for event in events:
@@ -51,15 +74,23 @@ def bucket_events(events: list[DetectionEvent], since: datetime, window: timedel
         buckets.setdefault(index, []).append(event)
 
     result = []
+    # Clustering is done once for the whole range by the caller and shared by
+    # every bucket, so a person spanning two buckets stays one person in both.
+    person_ids = person_ids or {}
+
     for index in sorted(buckets):
         bucket = buckets[index]
         dwell_values = [e.dwell_seconds for e in bucket if e.dwell_seconds is not None]
         engagement_values = [e.engagement_score for e in bucket if e.engagement_score is not None]
-        # A person is one track within one camera node, so the pair is the
-        # identity. Rows from a node too old to send a track_id fall back to
-        # counting as one person each, which is what they were before.
+        # A person is not a track: cameras watching one area each report the
+        # same visitor separately, so counting tracks counted them once per
+        # camera. Clustering is done once over the whole range rather than per
+        # bucket, so someone spanning two buckets stays one person in both
+        # instead of being re-derived either side of the boundary.
         people = {
-            (e.camera_node_id, e.track_id) if e.track_id else (e.camera_node_id, f"row-{e.id}")
+            person_ids.get((e.camera_node_id, e.track_id), f"{e.camera_node_id}:row-{e.id}")
+            if e.track_id
+            else f"{e.camera_node_id}:row-{e.id}"
             for e in bucket
         }
         result.append(
@@ -118,4 +149,5 @@ async def get_aggregates(
 
     result = await db.execute(stmt)
     events = result.scalars().all()
-    return bucket_events(events, range_since, window_delta)
+    people = await person_ids_in_thread(events, appearances=await load_appearances(db, events))
+    return bucket_events(events, range_since, window_delta, people)

@@ -296,6 +296,106 @@ misclassification.
 
 ---
 
+## Tracking and position
+
+The models above answer "what is this face". These answer "who is this
+person, and where are they standing" -- and they turned out to matter
+more for the analytics than any classifier accuracy, because a count is
+only as good as its idea of what one person is.
+
+### Following a person between frames
+
+The original tracker matched detections by centroid distance. It never
+saw the detector's confidence scores, so a face that turned away or
+blurred looked exactly like a face that had left, and the track ended.
+ByteTrack matches confident detections first, then tries the
+low-confidence leftovers against tracks still unmatched -- a face loses
+confidence well before it disappears, and that second pass carries the
+track through.
+
+Identical frames through both, counting distinct tracks for one person:
+
+| clip | centroid | ByteTrack |
+|---|---|---|
+| `side_view` | 3 | **2** |
+| `looking_down` | 2 | 2 |
+| `close_1m` | 1 | 1 |
+
+The gain appears only on the turned-face clip, which is exactly the case
+the second stage exists for, at no measurable frame-rate cost. The
+centroid tracker is kept behind `--tracker centroid`, which is what makes
+this a measurement rather than a claim.
+
+### Anchoring identity on the body
+
+A face is a poor thing to be identified by: it exists only while someone
+looks roughly at the camera, so a track ended at every head turn. With a
+person detector running alongside and each face attributed to the body
+containing it, distinct tracks for one person:
+
+| clip | face-anchored | body-anchored |
+|---|---|---|
+| `side_view` | 2 | **1** |
+| `looking_down` | 2 | 2 |
+| `medium_2m` | 2 | **1** |
+| `close_1m` | 1 | 1 |
+
+Face-to-body attribution was 47/47 on the test clip. Cost: 14.40 to 12.07
+FPS on Apple Silicon, about 16%.
+
+### Where a person is standing
+
+This is the largest single accuracy change in the system, and it is
+geometric rather than learned. A face carries no height, so placing one
+in the world meant assuming how tall its owner is, and the error runs
+along the viewing ray in proportion to how wrong that guess was. A body's
+box has feet at its bottom edge, and feet are on the floor by definition.
+
+Synthetic camera 2.2 m up, plane assumed at 1.60 m, person at a known
+point:
+
+| real head height | floor method | head-height method |
+|---|---|---|
+| 1.45 m | **0.000 m** | 0.601 m |
+| 1.60 m | **0.000 m** | 0.010 m |
+| 1.75 m | **0.000 m** | 0.976 m |
+| 1.90 m | **0.000 m** | **2.869 m** |
+
+The old method is exact only for someone precisely the assumed height. At
+1.90 m it placed a person nearly three metres from where they stood --
+inside a room-sized zone, the difference between a heatmap and a
+decoration. The floor method has no such term; a round-trip test closes
+to within 5 cm and is part of the suite.
+
+It holds only while feet are visible. A body cropped by the bottom of the
+frame reports no floor contact and falls back to the head-height path,
+rather than returning a confident wrong coordinate.
+
+### Recognising a person on another camera
+
+Two backbones, measured on real body crops from the evaluation clips:
+
+| | ResNet18 (ImageNet) | yolo26n-reid |
+|---|---|---|
+| same person, consistent view | 0.930 – 0.998 | 0.704 – 0.973 |
+| same person, different footage | 0.483 – **0.920** | -0.030 – **0.270** |
+
+The second row is the decisive one. An ImageNet backbone scored two
+genuinely different views at 0.92, indistinguishable from a real match --
+it was never trained to tell people apart and does not. The
+re-identification encoder puts them at 0.09 mean, which leaves a gap to
+threshold in.
+
+**The threshold is not tuned.** The separation that should set it is
+between two *different* people, and every clip in this repository shows
+one person, so that number has never been measured here. 0.6 is chosen to
+sit clear of the measured bands and is marked as provisional in both
+`src/retailvision/appearance.py` and `server/app/dedup.py`. Footage
+containing several people is the single most valuable thing that could be
+added to this repository.
+
+---
+
 ## Reproducing these numbers
 
 Datasets are not committed (`data/` is gitignored). Prepare them first:
@@ -315,6 +415,12 @@ are generated from. Re-running an evaluation overwrites its report, so
 the committed reports always describe the committed weights.
 
 ## Known limitations
+
+- **The re-identification threshold is untuned** (0.6). It separates the
+  bands that *were* measured, but the number that should set it is the
+  similarity between two different people, and no footage here contains
+  more than one. Treat cross-camera linking of non-overlapping tracks as
+  unvalidated until that exists.
 
 - **Age degrades badly on live camera input** (25–40% vs 88.77% on the
   test set). Treated as a soft hint, never a per-person fact.

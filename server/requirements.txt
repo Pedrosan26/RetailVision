@@ -13,3 +13,9 @@ httpx
 # app/ORM logic, not TimescaleDB-specific behavior (that's exercised by
 # actually applying the Alembic migration against real TimescaleDB).
 aiosqlite
+
+# numpy: the appearance comparison in dedup.py is a cosine over 512-dimensional
+# vectors, run for every pair of tracks with no shared moment -- which is most
+# pairs. In pure Python that loop dominated the whole request; here it is the
+# one place the server does numerical work, and it is worth the dependency.
+numpy

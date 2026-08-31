@@ -23,11 +23,34 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
+from ..dedup import person_ids_in_thread
+from ..models.appearance import TrackAppearance
 from ..models.detection import DetectionEvent
 from ..schemas.detection import VisitOut
 from ..utils import as_utc
 
 router = APIRouter(prefix="/api/v1", tags=["visits"])
+
+
+async def load_appearances(db, events) -> dict[tuple[str, str], list[float]]:
+    """Fetch the stored appearance for every track appearing in these events.
+
+    Scoped to the tracks actually in the range rather than loading the
+    whole table: a query over an hour touches a handful of tracks, and the
+    table holds a retention window's worth.
+    """
+    keys = {(e.camera_node_id, e.track_id) for e in events if e.track_id is not None}
+    if not keys:
+        return {}
+    nodes = {camera for camera, _ in keys}
+    rows = (
+        await db.execute(select(TrackAppearance).where(TrackAppearance.camera_node_id.in_(nodes)))
+    ).scalars().all()
+    return {
+        (row.camera_node_id, row.track_id): row.embedding
+        for row in rows
+        if (row.camera_node_id, row.track_id) in keys
+    }
 
 DEFAULT_LOOKBACK = timedelta(hours=24)
 DEFAULT_LIMIT = 200
@@ -58,12 +81,20 @@ async def get_visits(
         stmt = stmt.where(DetectionEvent.camera_node_id == camera_node_id)
     events = (await db.execute(stmt)).scalars().all()
 
-    grouped: dict[tuple[str, str], list[DetectionEvent]] = {}
+    # A visit is a person's stay, not a camera's view of it. Grouping by track
+    # produced one row per camera that could see them, so a visitor walking
+    # through a room covered by three cameras appeared as three separate
+    # visitors with three separate durations, each shorter than the real one.
+    person_ids = await person_ids_in_thread(events, appearances=await load_appearances(db, events))
+
+    grouped: dict[str, list[DetectionEvent]] = {}
     for event in events:
-        grouped.setdefault((event.camera_node_id, event.track_id), []).append(event)
+        person = person_ids.get((event.camera_node_id, event.track_id), f"{event.camera_node_id}:{event.track_id}")
+        grouped.setdefault(person, []).append(event)
 
     visits = []
-    for (node, track), rows in grouped.items():
+    for person, rows in grouped.items():
+        node, track = person.split(":", 1)
         rows.sort(key=lambda e: as_utc(e.timestamp))
         emotions = Counter(e.emotion for e in rows)
         # Zone is the mode of the non-null sightings: a person is "in" the

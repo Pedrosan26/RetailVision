@@ -9,10 +9,11 @@ rather than handed a pose directly.
 
 import unittest
 
+import cv2
 import numpy as np
 
 from src.retailvision.marker_map import MarkerMap
-from src.retailvision.marker_pose import MarkerPoseEstimator
+from src.retailvision.marker_pose import MarkerPoseEstimator, invert_pose
 from src.retailvision.zones import Zone, ZoneMap, ZoneResolver
 from tests.test_marker_map import (
     FLOOR_MARKERS,
@@ -86,6 +87,50 @@ class TestZoneResolver(unittest.TestCase):
         position = self.resolver.world_position((width // 2 - 20, height // 2 - 20, 40, 40))
         self.assertIsNotNone(position)
         self.assertTrue(all(np.isfinite(position)))
+
+    def project_to_pixel(self, world_point: tuple[float, float, float]) -> tuple[float, float]:
+        """Where a known world point lands in the image, for round-tripping the floor projection."""
+        world_from_camera = self.resolver.camera_pose
+        camera_from_world = invert_pose(world_from_camera)
+        rotation, _ = cv2.Rodrigues(camera_from_world[:3, :3])
+        projected, _ = cv2.projectPoints(
+            np.array([world_point], dtype=np.float64),
+            rotation,
+            camera_from_world[:3, 3],
+            self.calibration.camera_matrix,
+            self.calibration.dist_coeffs,
+        )
+        return tuple(float(v) for v in projected[0][0])
+
+    def test_floor_position_recovers_the_point_it_was_projected_from(self) -> None:
+        """A pixel where someone's feet meet the floor maps back to where they are standing.
+
+        This is the claim body detection is worth having for: with the
+        contact point on z = 0 there is no assumed height in the answer, so
+        the round trip should close to within centimetres rather than to
+        within how much people differ in height.
+        """
+        self.localize()
+        standing_at = (1.0, 1.5, 0.0)
+        recovered = self.resolver.floor_world_position(self.project_to_pixel(standing_at))
+        self.assertIsNotNone(recovered)
+        np.testing.assert_allclose(recovered, standing_at[:2], atol=0.05)
+
+    def test_floor_position_puts_that_person_in_the_zone(self) -> None:
+        """A floor contact inside the marked area resolves to that zone."""
+        self.localize()
+        self.assertEqual(self.resolver.zone_for_floor(self.project_to_pixel((1.0, 1.5, 0.0))), "floor_zone")
+
+    def test_floor_position_outside_the_markers_is_in_no_zone(self) -> None:
+        """Standing well outside the marked area resolves to nothing, not to the nearest zone."""
+        self.localize()
+        self.assertIsNone(self.resolver.zone_for_floor(self.project_to_pixel((-3.0, 1.5, 0.0))))
+
+    def test_floor_position_needs_a_localized_camera(self) -> None:
+        """Without a pose there is no ray to trace, so no position is invented."""
+        self.resolver.update(blank_frame())
+        self.assertIsNone(self.resolver.floor_world_position((100.0, 100.0)))
+        self.assertIsNone(self.resolver.zone_for_floor((100.0, 100.0)))
 
     def test_occupancy_counts_only_resolved_zones(self) -> None:
         """Detections outside every zone, or unresolved, are not counted anywhere."""
