@@ -21,7 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
-from ..dedup import person_ids_for_events
+from ..dedup import person_ids_in_thread
 from ..models.appearance import TrackAppearance
 from ..models.detection import DetectionEvent
 from ..schemas.detection import AggregateBucket
@@ -65,7 +65,7 @@ def bucket_events(
     events: list[DetectionEvent],
     since: datetime,
     window: timedelta,
-    appearances: dict[tuple[str, str], list[float]] | None = None,
+    person_ids: dict[tuple[str, str], str] | None = None,
 ) -> list[AggregateBucket]:
     """Group events into fixed-size time buckets aligned to `since`, aggregating each bucket."""
     buckets: dict[int, list[DetectionEvent]] = {}
@@ -74,8 +74,9 @@ def bucket_events(
         buckets.setdefault(index, []).append(event)
 
     result = []
-    # One clustering pass over every event in range, shared by all buckets.
-    person_ids = person_ids_for_events(events, appearances=appearances)
+    # Clustering is done once for the whole range by the caller and shared by
+    # every bucket, so a person spanning two buckets stays one person in both.
+    person_ids = person_ids or {}
 
     for index in sorted(buckets):
         bucket = buckets[index]
@@ -148,4 +149,5 @@ async def get_aggregates(
 
     result = await db.execute(stmt)
     events = result.scalars().all()
-    return bucket_events(events, range_since, window_delta, await load_appearances(db, events))
+    people = await person_ids_in_thread(events, appearances=await load_appearances(db, events))
+    return bucket_events(events, range_since, window_delta, people)

@@ -21,7 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
-from ..dedup import person_ids_for_events
+from ..dedup import person_ids_in_thread
 from ..models.appearance import TrackAppearance
 from ..models.detection import DetectionEvent
 from ..schemas.detection import SummaryOut
@@ -93,7 +93,7 @@ async def get_summary(
     # Busiest hour: distinct people per hour-aligned bucket, peak wins. A person
     # spanning two hours counts in both, which is what "how busy was that hour"
     # means -- they were there during it.
-    people = person_ids_for_events(events, appearances=await load_appearances(db, events))
+    people = await person_ids_in_thread(events, appearances=await load_appearances(db, events))
 
     per_hour: dict[int, set[str]] = {}
     for event in events:

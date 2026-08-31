@@ -23,7 +23,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
-from ..dedup import person_ids_for_events
+from ..dedup import person_ids_in_thread
 from ..models.appearance import TrackAppearance
 from ..models.detection import DetectionEvent
 from ..schemas.detection import VisitOut
@@ -85,7 +85,7 @@ async def get_visits(
     # produced one row per camera that could see them, so a visitor walking
     # through a room covered by three cameras appeared as three separate
     # visitors with three separate durations, each shorter than the real one.
-    person_ids = person_ids_for_events(events, appearances=await load_appearances(db, events))
+    person_ids = await person_ids_in_thread(events, appearances=await load_appearances(db, events))
 
     grouped: dict[str, list[DetectionEvent]] = {}
     for event in events:

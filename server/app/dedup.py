@@ -27,10 +27,13 @@ frames would smear one person into a short trail and count them repeatedly.
 
 from __future__ import annotations
 
+import asyncio
 import math
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+
+import numpy as np
 
 # Two detections from different cameras closer than this are treated as one
 # person. It has to exceed the position error, which is dominated by how far
@@ -258,9 +261,41 @@ def looks_like(
     a, b = appearances.get(left), appearances.get(right)
     if a is None or b is None or len(a) != len(b):
         return False
-    dot = sum(x * y for x, y in zip(a, b))
-    norms = math.sqrt(sum(x * x for x in a)) * math.sqrt(sum(y * y for y in b))
-    return norms > 0 and dot / norms >= threshold
+    left_vector = np.asarray(a, dtype=np.float32)
+    right_vector = np.asarray(b, dtype=np.float32)
+    norms = float(np.linalg.norm(left_vector) * np.linalg.norm(right_vector))
+    return norms > 0 and float(left_vector @ right_vector) / norms >= threshold
+
+
+def _as_unit_vectors(appearances: dict[TrackKey, Sequence[float]]) -> dict[TrackKey, np.ndarray]:
+    """Convert each appearance to a normalised array once, before any comparing starts.
+
+    The comparison runs for every pair of tracks with no shared moment,
+    which is most pairs, and converting the same lists inside that loop
+    made the conversion the cost rather than the arithmetic. Normalising
+    here too means each comparison is a bare dot product.
+
+    Vectors arrive normalised already -- the node does it -- so this is
+    belt and braces against a node that changes and a divide by zero on a
+    degenerate one.
+    """
+    unit: dict[TrackKey, np.ndarray] = {}
+    for key, values in appearances.items():
+        vector = np.asarray(values, dtype=np.float32)
+        norm = float(np.linalg.norm(vector))
+        if norm > 0:
+            unit[key] = vector / norm
+    return unit
+
+
+def _looks_like_unit(
+    left: TrackKey, right: TrackKey, unit: dict[TrackKey, np.ndarray], threshold: float
+) -> bool:
+    """looks_like() over vectors already normalised by _as_unit_vectors, so it is one dot product."""
+    a, b = unit.get(left), unit.get(right)
+    if a is None or b is None or a.shape != b.shape:
+        return False
+    return float(a @ b) >= threshold
 
 
 def _overlaps(left: TrackPath, right: TrackPath, min_overlap: timedelta) -> bool:
@@ -301,6 +336,7 @@ def cluster_tracks(
     wider window, names the same person the same way instead of
     renumbering everyone.
     """
+    unit = _as_unit_vectors(appearances) if appearances else {}
     parent: dict[TrackKey, TrackKey] = {path.key: path.key for path in paths}
 
     def find(key: TrackKey) -> TrackKey:
@@ -331,7 +367,7 @@ def cluster_tracks(
                 # A disagreement here is two people, and appearance gets no vote.
                 if same_person(left, right, merge_radius, min_overlap, tolerance):
                     union(left.key, right.key)
-            elif appearances and looks_like(left.key, right.key, appearances, appearance_threshold):
+            elif unit and _looks_like_unit(left.key, right.key, unit, appearance_threshold):
                 # No shared moment, so position has nothing to say and
                 # appearance is the only evidence. This holds whether or not
                 # the two tracks came from the same camera: someone who walks
@@ -387,3 +423,25 @@ def person_ids_for_events(
     for camera_node_id, track_id in unpositioned:
         resolved.setdefault((camera_node_id, track_id), f"{camera_node_id}:{track_id}")
     return resolved
+
+
+async def person_ids_in_thread(
+    events: Iterable,
+    appearances: dict[tuple[str, str], Sequence[float]] | None = None,
+) -> dict[tuple[str, str], str]:
+    """person_ids_for_events() on a worker thread, so it cannot stall the server.
+
+    Clustering is the one genuinely CPU-bound thing this server does, and
+    it runs inside async request handlers. Called directly it holds the
+    event loop for its whole duration, which does not slow that request --
+    it slows every other request, because none of them can be serviced
+    meanwhile. With a dashboard polling several endpoints on a timer, the
+    queue never drains and latency compounds into minutes: endpoints doing
+    no work at all, like the one that reads a single zone polygon row,
+    were taking over ninety seconds.
+
+    A thread rather than a process: the work is numpy and plain Python
+    over data already in memory, and handing it to another process would
+    cost more in pickling than it saves.
+    """
+    return await asyncio.to_thread(person_ids_for_events, events, appearances=appearances)
